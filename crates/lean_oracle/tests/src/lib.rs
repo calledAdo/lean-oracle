@@ -3,6 +3,8 @@
 // The crate is intentionally simple: it only exposes test modules that exercise
 // the shared parsing, hashing, proof, and signature logic.
 
+pub mod hermes_real_fixture;
+
 // Only compile this module during tests.
 #[cfg(test)]
 mod oracle_data_tests;

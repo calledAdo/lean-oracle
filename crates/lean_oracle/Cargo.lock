@@ -1931,6 +1931,7 @@ dependencies = [
  "ckb_schemars",
  "k256",
  "lean-oracle-common",
+ "serde_json",
  "sha3",
 ]
 

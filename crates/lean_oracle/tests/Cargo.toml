@@ -10,6 +10,10 @@ version.workspace = true
 # Inherit workspace edition.
 edition.workspace = true
 
+[[bin]]
+name = "print-hermes"
+path = "src/bin/print_hermes.rs"
+
 [dependencies]
 # Shared parsing and verification logic under test.
 lean-oracle-common = { path = "../contracts/common" }
@@ -26,3 +30,5 @@ ckb-fixed-hash-core = "=1.1.0"
 k256 = { version = "0.13.4", default-features = false, features = ["ecdsa"] }
 # Host-side Keccak hashing used to mirror Wormhole/Pyth hashing behavior.
 sha3 = { version = "0.10.8", default-features = false }
+# Decode Hermes JSON in `print-hermes --stdin`.
+serde_json = "1.0"
