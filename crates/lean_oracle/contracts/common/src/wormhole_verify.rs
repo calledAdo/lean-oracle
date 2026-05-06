@@ -12,6 +12,7 @@
 
 use crate::{
     guardian_set::GuardianSetData,
+    types::GuardianAddress,
     wormhole_vaa::ParsedVaa,
 };
 // Pull in the secp256k1 ECDSA recovery types we need.
@@ -94,7 +95,7 @@ pub fn verify_guardian_quorum(
         let recovered =
             VerifyingKey::recover_from_prehash(&prehash, &sig, recid).map_err(|_| VerifyError::Signature)?;
         // Convert the recovered secp256k1 key into an Ethereum-style address.
-        let recovered_addr = ethereum_address(&recovered);
+        let recovered_addr = GuardianAddress(ethereum_address(&recovered));
         // Reject if the recovered address does not match the governed guardian.
         if &recovered_addr != expected {
             return Err(VerifyError::Signature);

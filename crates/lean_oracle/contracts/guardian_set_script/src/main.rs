@@ -2,9 +2,17 @@
 //!
 //! Its job is intentionally narrow:
 //! - allow creation of well-formed guardian-set cells
-//! - allow no-op updates
-//! - reject backwards set-index moves
-//! - reject unauthorized rotations until explicit governance logic is added
+//! - allow in-place rotation (forward set-index moves)
+//! - reject backwards or same-index set-index moves
+//! - enforce canonical Type ID-based singleton identity
+//! - enforce singleton script-group shape
+//!
+//! Governance authority for rotations is modeled by the cell's lock script.
+//!
+//! **Current-set-only policy**: guardian-set lifecycle fields (creation_time,
+//! expiration_time) are not stored. This fork does not implement Wormhole's
+//! expiry or grace behavior. Once a rotation occurs, only the new canonical set
+//! is accepted by the oracle. Callers must fetch a fresh blob after rotation.
 
 // Compile without the standard library so the binary can run in CKB-VM.
 #![no_std]
@@ -23,31 +31,109 @@ use ckb_std::default_alloc;
 // Register the CKB entrypoint symbol.
 #[cfg(not(test))]
 ckb_std::entry!(program_entry);
-// Install the default allocator for contract builds.
+// Install an explicit allocator for contract builds.
+//
+// Keep the allocator profile aligned with the working Rust CKB contracts we
+// use as reference so deployment/runtime behavior stays consistent.
 #[cfg(not(test))]
-default_alloc!();
+default_alloc!(16384, 1258306, 64);
 
 // Import the CKB data source enum and cell-data loader.
 use ckb_std::{
     ckb_constants::Source,
-    high_level::load_cell_data,
+    ckb_types::prelude::*,
+    high_level::{load_cell_data, load_cell_type, load_input, load_script, QueryIter},
 };
 // Import shared errors and guardian-set decoding.
-use lean_oracle_common::{
-    errors::*,
-    guardian_set::GuardianSetData,
-};
+use lean_oracle_common::{errors::*, guardian_set::GuardianSetData};
 
 // CKB entrypoint. Return `0` on success or an `i8` error code on failure.
 pub fn program_entry() -> i8 {
-    // Treat the absence of a group input as a creation transaction.
-    let is_creation = load_cell_data(0, Source::GroupInput).is_err();
+    // Enforce singleton script group shape.
+    // Both creation and update must have exactly one output in the group.
+    let output_count = QueryIter::new(load_cell_data, Source::GroupOutput).count();
+    if output_count != 1 {
+        return ERROR_INVALID_SCRIPT_GROUP;
+    }
+
+    // The script group must contain at most one input cell.
+    let input_count = QueryIter::new(load_cell_data, Source::GroupInput).count();
+    if input_count > 1 {
+        return ERROR_INVALID_SCRIPT_GROUP;
+    }
+
+    // Validate the canonical Type ID singleton rule.
+    let type_id_err = validate_type_id(input_count);
+    if type_id_err != 0 {
+        return type_id_err;
+    }
+
     // Route creation and update paths separately.
-    if is_creation {
+    if input_count == 0 {
         return validate_creation();
     }
-    // Otherwise validate an update transition.
+    // Otherwise validate an update transition (input_count == 1).
     validate_update()
+}
+
+/// Verify the standard CKB Type ID rule.
+///
+/// This ensures the guardian-set cell is a unique canonical singleton.
+fn validate_type_id(input_count: usize) -> i8 {
+    let script = match load_script() {
+        Ok(s) => s,
+        Err(_) => return ERROR_SYSCALL,
+    };
+    let args = script.args().raw_data();
+
+    // Type ID args must be exactly 32 bytes.
+    if args.len() != 32 {
+        return ERROR_TYPE_ID_INVALID;
+    }
+
+    if input_count == 1 {
+        // Update transition: continuity is guaranteed by the script hash match.
+        return 0;
+    }
+
+    // Creation: input_count == 0. Verify the Type ID is derived correctly.
+    //
+    // type_id = blake2b(first_input, first_output_index)
+    let first_input = match load_input(0, Source::Input) {
+        Ok(i) => i,
+        Err(_) => return ERROR_SYSCALL,
+    };
+
+    // Find our absolute output index in the transaction.
+    let mut output_index = None;
+    for (i, s) in QueryIter::new(load_cell_type, Source::Output).enumerate() {
+        if let Some(s) = s {
+            if s.as_slice() == script.as_slice() {
+                output_index = Some(i);
+                break;
+            }
+        }
+    }
+
+    let output_index = match output_index {
+        Some(idx) => idx as u64,
+        None => return ERROR_SYSCALL,
+    };
+
+    // Calculate the expected Type ID using CKB's default blake2b settings.
+    let mut blake2b = blake2b_ref::Blake2bBuilder::new(32)
+        .personal(b"ckb-default-hash")
+        .build();
+    blake2b.update(first_input.as_slice());
+    blake2b.update(&output_index.to_le_bytes());
+    let mut expected_id = [0u8; 32];
+    blake2b.finalize(&mut expected_id);
+
+    if args.as_ref() != expected_id {
+        return ERROR_TYPE_ID_INVALID;
+    }
+
+    0
 }
 
 // Validate creation of a new guardian-set cell.
@@ -64,12 +150,8 @@ fn validate_creation() -> i8 {
         None => return ERROR_GUARDIAN_SET_MALFORMED,
     };
 
-    // Reject empty guardian lists or zero quorum.
-    if state.guardian_addresses.is_empty() || state.quorum == 0 {
-        return ERROR_GUARDIAN_SET_MALFORMED;
-    }
-    // Reject impossible quorums that exceed the number of guardians.
-    if state.quorum as usize > state.guardian_addresses.len() {
+    // Require the set to be internally consistent (non-empty, valid quorum).
+    if !state.validate() {
         return ERROR_GUARDIAN_SET_MALFORMED;
     }
 
@@ -101,19 +183,20 @@ fn validate_update() -> i8 {
         None => return ERROR_GUARDIAN_SET_MALFORMED,
     };
 
-    // Guardian-set indices are allowed to stay the same or move forward, but
-    // never backwards.
-    if new.set_index < old.set_index {
+    // Require strict forward rotation for in-place updates.
+    //
+    // Disallowing same-index mutation ensures that every legitimate signer
+    // rotation is visible as a set-index increment.
+    if new.set_index <= old.set_index {
         return ERROR_GUARDIAN_SET_CONTINUITY;
     }
 
-    // Governance-auth rotation rules will be added here.
-    // For now we allow pure no-op updates so transaction assembly is easier to
-    // test while still rejecting any real mutation.
-    if old.governance_fields_unchanged(&new) {
-        return 0;
+    // Require the new set to be internally consistent.
+    if !new.validate() {
+        return ERROR_GUARDIAN_SET_MALFORMED;
     }
 
-    // Any actual mutation is currently treated as an unauthorized rotation.
-    ERROR_GUARDIAN_SET_ROTATION_UNAUTHORIZED
+    // Mutation is allowed if the set_index moves forward.
+    // Authorization is assumed to be handled by the cell's lock script.
+    0
 }

@@ -1,0 +1,21 @@
+{
+  "name": "lean-oracle-deployment",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.json",
+    "deploy:guardian-set-type": "node --enable-source-maps ./dist/index.js deploy:guardian-set-type",
+    "deploy:oracle-type": "node --enable-source-maps ./dist/index.js deploy:oracle-type",
+    "deploy:guardian-set": "node --enable-source-maps ./dist/index.js deploy:guardian-set",
+    "deploy:oracle": "node --enable-source-maps ./dist/index.js deploy:oracle"
+  },
+  "dependencies": {
+    "@ckb-ccc/core": "^1.12.2",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.6.3"
+  }
+}

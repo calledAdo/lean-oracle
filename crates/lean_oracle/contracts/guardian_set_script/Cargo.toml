@@ -15,9 +15,15 @@ edition.workspace = true
 
 [dependencies]
 # `ckb-std` provides the low-level CKB contract environment.
-ckb-std = "0.14"
+ckb-std = "1.0"
 # `lean-oracle-common` provides shared data layouts and error codes.
 lean-oracle-common = { path = "../common" }
+# `blake2b-ref` for Type ID hashing.
+blake2b-ref = "0.3"
+
+[features]
+library = []
+native-simulator = ["library", "ckb-std/native-simulator"]
 
 [[bin]]
 # Name of the compiled CKB binary.

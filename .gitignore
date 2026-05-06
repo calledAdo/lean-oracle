@@ -20,6 +20,7 @@ pnpm-debug.log*
 .env
 .env.*
 !.env.example
+deployment/.env
 
 # Editor / OS
 .DS_Store
@@ -28,3 +29,8 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+
+# Deployment toolbox (do not commit local npm install / tsc output)
+deployment/node_modules/
+deployment/dist/
+deployment/artifacts/*.json

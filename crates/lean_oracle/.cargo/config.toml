@@ -1,0 +1,9 @@
+# Build CKB contracts for the expected RISC-V target inside this workspace.
+[build]
+target = "riscv64imac-unknown-none-elf"
+
+[target.riscv64imac-unknown-none-elf]
+# offckb/ckb-vm execution can be sensitive to binaries advertising or using the
+# atomic extension. Make the contract target explicit and disable `a` so the
+# produced ELF matches the VM surface more conservatively.
+rustflags = ["-C", "link-arg=-s", "-C", "target-feature=-a"]

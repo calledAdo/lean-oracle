@@ -7,6 +7,8 @@
 //!
 //! The on-chain script is responsible for parsing that blob further.
 
+use crate::byte_reader::ByteReader;
+
 // The decoded witness view used by the oracle script.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OracleUpdateWitness {
@@ -17,16 +19,16 @@ pub struct OracleUpdateWitness {
 impl OracleUpdateWitness {
     // Decode the witness wrapper from raw bytes.
     pub fn from_bytes(data: &[u8]) -> Option<Self> {
-        // Track the current parsing position.
-        let mut cursor = 0usize;
+        let mut reader = ByteReader::new(data);
 
         // Read the size prefix for the accumulator blob.
-        let update_len = read_u32_le(data, &mut cursor)? as usize;
+        let update_len = reader.read_u32_le()? as usize;
         // Slice out the accumulator blob itself.
-        let accumulator_update = take_bytes(data, &mut cursor, update_len)?.to_vec();
+        let accumulator_update = reader.take(update_len)?.to_vec();
 
-        // Reject trailing bytes so the witness format stays strict.
-        if cursor != data.len() {
+        // Reject trailing bytes so the witness format stays strict and
+        // unambiguous during transaction validation.
+        if !reader.is_finished() {
             return None;
         }
 
@@ -45,31 +47,4 @@ impl OracleUpdateWitness {
         // Return the encoded witness bytes.
         out
     }
-}
-
-// Read a little-endian `u32` from the current cursor position.
-fn read_u32_le(data: &[u8], cursor: &mut usize) -> Option<u32> {
-    // Slice the next four bytes from the buffer.
-    let bytes = take_bytes(data, cursor, 4)?;
-    // Move them into a fixed-size array for conversion.
-    let mut out = [0u8; 4];
-    out.copy_from_slice(bytes);
-    // Convert the little-endian bytes into a `u32`.
-    Some(u32::from_le_bytes(out))
-}
-
-// Slice `len` bytes from the current cursor position and advance the cursor.
-fn take_bytes<'a>(data: &'a [u8], cursor: &mut usize, len: usize) -> Option<&'a [u8]> {
-    // Compute the end position with overflow protection.
-    let end = cursor.checked_add(len)?;
-    // Reject requests that would run past the end of the buffer.
-    if end > data.len() {
-        return None;
-    }
-    // Borrow the requested byte range.
-    let out = &data[*cursor..end];
-    // Advance the cursor for the next parser step.
-    *cursor = end;
-    // Return the borrowed slice.
-    Some(out)
 }

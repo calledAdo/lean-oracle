@@ -18,9 +18,13 @@ edition.workspace = true
 
 [dependencies]
 # `ckb-std` provides the low-level CKB contract APIs.
-ckb-std = "0.14"
+ckb-std = "1.0"
 # `lean-oracle-common` provides the shared protocol logic and byte layouts.
 lean-oracle-common = { path = "../common" }
+
+[features]
+library = []
+native-simulator = ["library", "ckb-std/native-simulator"]
 
 [[bin]]
 # Name of the compiled CKB binary.

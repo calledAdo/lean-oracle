@@ -19,6 +19,12 @@ extern crate alloc;
 
 // Shared numeric error codes returned by the scripts.
 pub mod errors;
+// Domain newtypes for improved type safety.
+pub mod types;
+// Internal parse-error result type.
+pub mod parse_error;
+// Internal byte-reader utility for protocol parsers.
+pub(crate) mod byte_reader;
 // Guardian-set cell parsing and encoding.
 pub mod guardian_set;
 // Generic and Pyth-specific Merkle helpers.

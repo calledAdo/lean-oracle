@@ -7,30 +7,33 @@
 //! - sequence/timestamp metadata
 //! - the raw payload body that Pyth uses for accumulator updates
 
+use crate::{byte_reader::ByteReader, types::{EmitterAddress, GuardianSetIndex}};
+
+// The only VAA version this parser accepts. Wormhole currently uses version 1
+// exclusively. If a future version is introduced it will require an explicit
+// protocol review before support is added here. Unknown versions are rejected
+// as a fail-closed policy: better to refuse a valid message than to silently
+// misparse a format change.
+pub const WORMHOLE_VAA_VERSION: u8 = 1;
+
 // Each Wormhole signature entry occupies 66 bytes:
 // - 1 byte guardian index
 // - 65 bytes ECDSA signature
 //
-// This matches the Wormhole VAA format documentation:
-// - VAA header contains `guardian_index || signature`
-// - source: Wormhole docs, "VAAs"
+// This matches the Wormhole VAA format: `guardian_index || signature`
 pub const WORMHOLE_SIGNATURE_LEN: usize = 66;
 // The ECDSA portion alone occupies 65 bytes: `r || s || v`.
-//
-// This also comes directly from the Wormhole VAA format.
 pub const WORMHOLE_SIGNATURE_BYTES_LEN: usize = 65;
 // The fixed-length prefix of a Wormhole body is 51 bytes before the arbitrary
 // protocol payload begins.
 //
-// This is the sum of:
+// Layout:
 // - timestamp: 4
 // - nonce: 4
 // - emitter_chain: 2
 // - emitter_address: 32
 // - sequence: 8
 // - consistency_level: 1
-//
-// That layout matches the Wormhole VAA body format documentation.
 pub const WORMHOLE_BODY_PREFIX_LEN: usize = 51;
 
 // Decoded signature entry from the Wormhole VAA header.
@@ -69,7 +72,7 @@ pub struct ParsedVaa {
     // VAA version byte.
     pub version: u8,
     // Active guardian-set index referenced by this message.
-    pub guardian_set_index: u32,
+    pub guardian_set_index: GuardianSetIndex,
     // All signatures attached to the VAA.
     pub signatures: alloc::vec::Vec<WormholeSignature>,
     // Wormhole body timestamp.
@@ -79,7 +82,7 @@ pub struct ParsedVaa {
     // Wormhole emitter chain id.
     pub emitter_chain: u16,
     // Wormhole emitter address.
-    pub emitter_address: [u8; 32],
+    pub emitter_address: EmitterAddress,
     // Wormhole sequence number.
     pub sequence: u64,
     // Wormhole consistency level.
@@ -94,24 +97,27 @@ pub struct ParsedVaa {
 impl ParsedVaa {
     // Parse a complete VAA from raw bytes.
     pub fn parse(encoded: &[u8]) -> Option<Self> {
-        // Start reading from the beginning of the byte buffer.
-        let mut cursor = 0usize;
+        let mut reader = ByteReader::new(encoded);
 
-        // Read the version byte.
-        let version = *take_bytes(encoded, &mut cursor, 1)?.first()?;
+        // Read and validate the version byte. Only WORMHOLE_VAA_VERSION (1) is
+        // supported. Any other value is rejected immediately — fail-closed.
+        let version = reader.read_u8()?;
+        if version != WORMHOLE_VAA_VERSION {
+            return None;
+        }
         // Read the guardian-set index in big-endian format.
-        let guardian_set_index = read_u32_be(encoded, &mut cursor)?;
+        let guardian_set_index = GuardianSetIndex(reader.read_u32_be()?);
         // Read the number of signatures in the header.
-        let signature_count = *take_bytes(encoded, &mut cursor, 1)?.first()? as usize;
+        let signature_count = reader.read_u8()? as usize;
 
         // Allocate the signatures vector with the exact required capacity.
         let mut signatures = alloc::vec::Vec::with_capacity(signature_count);
         // Parse each signature entry in sequence.
         for _ in 0..signature_count {
             // Read the guardian index.
-            let guardian_index = *take_bytes(encoded, &mut cursor, 1)?.first()?;
+            let guardian_index = reader.read_u8()?;
             // Read the raw 65-byte signature.
-            let signature_bytes = take_bytes(encoded, &mut cursor, WORMHOLE_SIGNATURE_BYTES_LEN)?;
+            let signature_bytes = reader.take(WORMHOLE_SIGNATURE_BYTES_LEN)?;
             // Copy the signature into a fixed-size array.
             let mut signature = [0u8; WORMHOLE_SIGNATURE_BYTES_LEN];
             signature.copy_from_slice(signature_bytes);
@@ -123,31 +129,34 @@ impl ParsedVaa {
         }
 
         // Everything left in the VAA after the signature header is the signed
-        // body.
-        let remaining = encoded.len().checked_sub(cursor)?;
-        let body = take_bytes(encoded, &mut cursor, remaining)?.to_vec();
+        // body. Signatures cover this region exactly.
+        let body_bytes = reader.remaining();
         // Reject bodies that are too short to contain the fixed Wormhole prefix.
-        if body.len() < WORMHOLE_BODY_PREFIX_LEN {
+        if body_bytes.len() < WORMHOLE_BODY_PREFIX_LEN {
             return None;
         }
 
+        let mut body_reader = ByteReader::new(body_bytes);
         // Decode the body timestamp.
-        let timestamp = u32::from_be_bytes(body[0..4].try_into().ok()?);
+        let timestamp = body_reader.read_u32_be()?;
         // Decode the body nonce.
-        let nonce = u32::from_be_bytes(body[4..8].try_into().ok()?);
+        let nonce = body_reader.read_u32_be()?;
         // Decode the emitter chain id.
-        let emitter_chain = u16::from_be_bytes(body[8..10].try_into().ok()?);
+        let emitter_chain = body_reader.read_u16_be()?;
 
         // Decode the 32-byte emitter address.
         let mut emitter_address = [0u8; 32];
-        emitter_address.copy_from_slice(&body[10..42]);
+        emitter_address.copy_from_slice(body_reader.take(32)?);
 
         // Decode the sequence number.
-        let sequence = u64::from_be_bytes(body[42..50].try_into().ok()?);
+        let sequence = body_reader.read_u64_be()?;
         // Decode the consistency level byte.
-        let consistency_level = body[50];
+        let consistency_level = body_reader.read_u8()?;
         // Everything after the first 51 bytes is protocol payload.
-        let payload = body[WORMHOLE_BODY_PREFIX_LEN..].to_vec();
+        let payload = body_reader.remaining().to_vec();
+
+        // Preserving the original body bytes is required for signature verification.
+        let body = body_bytes.to_vec();
 
         // Return the parsed VAA.
         Some(Self {
@@ -157,30 +166,11 @@ impl ParsedVaa {
             timestamp,
             nonce,
             emitter_chain,
-            emitter_address,
+            emitter_address: EmitterAddress(emitter_address),
             sequence,
             consistency_level,
             payload,
             body,
         })
     }
-}
-
-// Read a big-endian `u32` from the current cursor position.
-fn read_u32_be(data: &[u8], cursor: &mut usize) -> Option<u32> {
-    let bytes = take_bytes(data, cursor, 4)?;
-    let mut out = [0u8; 4];
-    out.copy_from_slice(bytes);
-    Some(u32::from_be_bytes(out))
-}
-
-// Slice a fixed number of bytes from the current cursor position and advance.
-fn take_bytes<'a>(data: &'a [u8], cursor: &mut usize, len: usize) -> Option<&'a [u8]> {
-    let end = cursor.checked_add(len)?;
-    if end > data.len() {
-        return None;
-    }
-    let out = &data[*cursor..end];
-    *cursor = end;
-    Some(out)
 }

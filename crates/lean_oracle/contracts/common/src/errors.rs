@@ -36,8 +36,9 @@ pub const ERROR_GUARDIAN_SET_INDEX_MISMATCH: i8 = 17;
 pub const ERROR_EMITTER_MISMATCH: i8 = 18;
 // The required guardian-set dep cell could not be found in the transaction.
 pub const ERROR_GUARDIAN_SET_NOT_FOUND: i8 = 19;
-// More than one guardian-set dep matched, or the located one was ambiguous.
-pub const ERROR_GUARDIAN_SET_HASH_MISMATCH: i8 = 20;
+// More than one guardian-set dep cell matched the expected type hash.
+// The script requires exactly one matching dep to avoid resolution ambiguity.
+pub const ERROR_GUARDIAN_SET_AMBIGUOUS: i8 = 20;
 // The VAA did not contain enough guardian signatures to satisfy quorum.
 pub const ERROR_GUARDIAN_QUORUM_NOT_MET: i8 = 21;
 // A guardian signature failed recovery or did not map to the governed set.
@@ -50,9 +51,14 @@ pub const ERROR_PRICE_UPDATE_MALFORMED: i8 = 24;
 pub const ERROR_PRICE_UPDATE_MISMATCH: i8 = 25;
 // The raw Pyth accumulator update could not be parsed or verified.
 pub const ERROR_ACCUMULATOR_UPDATE_MALFORMED: i8 = 26;
+// The script failed to verify the canonical Type ID rule.
+pub const ERROR_TYPE_ID_INVALID: i8 = 27;
+// The script group shape is invalid (e.g. multi-cell transitions).
+pub const ERROR_INVALID_SCRIPT_GROUP: i8 = 28;
 
-// The new guardian-set index moved backwards instead of staying monotonic.
+// The new guardian-set index moved backwards or failed to advance (same-index
+// mutation). Governance authority for the rotation is handled by the lock script.
 pub const ERROR_GUARDIAN_SET_CONTINUITY: i8 = 30;
-// A guardian-set rotation attempted to change governed fields without an
-// explicit governance path.
-pub const ERROR_GUARDIAN_SET_ROTATION_UNAUTHORIZED: i8 = 31;
+
+// The guardian-set dep decoded but failed internal consistency checks.
+pub const ERROR_GUARDIAN_SET_INVALID: i8 = 31;

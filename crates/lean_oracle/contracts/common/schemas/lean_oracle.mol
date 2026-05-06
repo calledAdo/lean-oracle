@@ -2,34 +2,39 @@
 // by `lean_oracle`.
 //
 // The current implementation uses manual byte encoding/decoding in Rust for
-// simplicity and auditability, but this file records the intended structured
-// schema so the project can move toward generated bindings later if desired.
+// simplicity and auditability, but this file is synchronized to match the
+// field names, types, and order used in the live Rust structures:
+// - contracts/common/src/oracle_data.rs
+// - contracts/common/src/guardian_set.rs
 
 array Uint32 [byte; 4];
 array Uint64 [byte; 8];
-array Uint128 [byte; 16];
+// Two's-complement signed variants — same byte width, distinct semantics.
+array Int32 [byte; 4];
+array Int64 [byte; 8];
 array Byte20 [byte; 20];
 array Byte32 [byte; 32];
 vector Byte20Vector <Byte20>;
 
 table OracleState {
     feed_id: Byte32,
-    price: Uint128,
-    conf: Uint128,
-    expo: Uint32,
+    guardian_set_type_hash: Byte32,
+    price: Int64,           // signed — Rust i64, little-endian
+    conf: Uint64,
+    expo: Int32,            // signed — Rust i32, little-endian (e.g. -8)
     publish_time: Uint64,
     prev_publish_time: Uint64,
-    guardian_set_index: Uint32,
+    ema_price: Int64,       // signed — Rust i64, little-endian
+    ema_conf: Uint64,
     emitter_chain: Uint32,
     emitter_address: Byte32,
-    max_age_secs: Uint64,
 }
 
+// This Nervos fork uses a current-set-only model. Lifecycle fields
+// (creation_time, expiration_time) are intentionally absent — only the active
+// canonical guardian set is trusted. Once rotated, old-set blobs are not honored.
 table GuardianSetState {
     set_index: Uint32,
     quorum: Uint32,
-    creation_time: Uint64,
-    expiration_time: Uint64,
-    governance_lock_hash: Byte32,
     guardian_addresses: Byte20Vector,
 }
