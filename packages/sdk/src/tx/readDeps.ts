@@ -70,11 +70,8 @@ export async function attachOracleReadDeps(
     depType: "code",
   };
 
-  // Attach oracle type-script code dep when provided.
-  params.tx.addCellDeps({
-    outPoint: deployment.oracleTypeScriptCodeDepOutPoint,
-    depType: "code",
-  });
+  // Attach oracle type-script code dep.
+  params.tx.addCellDeps(deployment.oracleType.codeDep);
 
   params.tx.addCellDeps(oracleCellDep);
   return { mutated: params.tx };

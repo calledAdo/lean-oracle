@@ -1,6 +1,8 @@
 export { LeanOracleClient } from "./LeanOracleClient.js";
-export type { LeanOracleClientOptions } from "./LeanOracleClient.js";
-export type { LeanOracleFuelCellCandidate } from "../tx/rebalanceFees.js";
+export type {
+  LeanOracleCellStateResult,
+  LeanOracleClientOptions,
+} from "./LeanOracleClient.js";
 export {
   LeanOracleMainnetClient,
   LeanOracleTestnetClient,

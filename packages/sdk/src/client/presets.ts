@@ -7,12 +7,11 @@
  * {@link LeanOracleMainnetClient} and only override URLs / deployment fields when needed.
  */
 
-// Preset clients intentionally do not accept CCC client injection.
-
+import type { Client } from "@ckb-ccc/core";
 import {
   leanOracleMainnetPreset,
   leanOracleTestnetPreset,
-} from "../networks/index.js";
+} from "../presets/index.js";
 import type { LeanOracleNetworkConfig } from "../types/network.js";
 import { LeanOracleClient } from "./LeanOracleClient.js";
 
@@ -43,17 +42,23 @@ function mergeNetwork(
 /**
  * Preset client for CKB testnet + Hermes beta.
  *
+ * Pass `cccClient` to inject a preconfigured CCC client (custom transport,
+ * shared instance, or test fake); when omitted the SDK builds a default
+ * `ClientPublicTestnet` from the (optionally overridden) JSON-RPC URL.
+ *
  * @public
  */
 export class LeanOracleTestnetClient extends LeanOracleClient {
   constructor(options?: {
     overrides?: LeanOraclePresetClientOverrides;
+    cccClient?: Client;
   }) {
     super({
       network: mergeNetwork(
         leanOracleTestnetPreset,
         options?.overrides,
       ),
+      cccClient: options?.cccClient,
     });
   }
 }
@@ -61,17 +66,23 @@ export class LeanOracleTestnetClient extends LeanOracleClient {
 /**
  * Preset client for CKB mainnet + Hermes.
  *
+ * Pass `cccClient` to inject a preconfigured CCC client (custom transport,
+ * shared instance, or test fake); when omitted the SDK builds a default
+ * `ClientPublicMainnet` from the (optionally overridden) JSON-RPC URL.
+ *
  * @public
  */
 export class LeanOracleMainnetClient extends LeanOracleClient {
   constructor(options?: {
     overrides?: LeanOraclePresetClientOverrides;
+    cccClient?: Client;
   }) {
     super({
       network: mergeNetwork(
         leanOracleMainnetPreset,
         options?.overrides,
       ),
+      cccClient: options?.cccClient,
     });
   }
 }

@@ -4,10 +4,11 @@ export {
   decodeOracleCellDataBytes,
 } from "./decodeOracleData.js";
 export {
-  buildOracleOutputFromHermesParsed,
+  buildOracleOutputFromHermesUpdate,
   encodeOracleCellDataBytes,
   pickHermesParsedTouchForFeed,
 } from "./encodeOracleData.js";
+export type { BuildOracleOutputFromHermesUpdateParams } from "./encodeOracleData.js";
 export {
   GUARDIAN_SET_HEADER_BYTE_LENGTH,
   decodeGuardianSetCellDataBytes,

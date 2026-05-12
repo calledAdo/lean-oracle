@@ -5,8 +5,10 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test tests/artifacts.test.mjs tests/validate.test.mjs",
     "deploy:guardian-set-type": "node --enable-source-maps ./dist/index.js deploy:guardian-set-type",
     "deploy:oracle-type": "node --enable-source-maps ./dist/index.js deploy:oracle-type",
+    "deploy:owned-type-bind-lock": "node --enable-source-maps ./dist/index.js deploy:owned-type-bind-lock",
     "deploy:guardian-set": "node --enable-source-maps ./dist/index.js deploy:guardian-set",
     "deploy:oracle": "node --enable-source-maps ./dist/index.js deploy:oracle"
   },

@@ -48,11 +48,22 @@ export interface FindOracleLiveCellsForFeedOptions {
 }
 
 /**
- * Stream indexer results in `"desc"` order and return the first cell whose decoded publish-time
- * passes the optional freshness floor.
+ * Drain all matching oracle live cells (oracle type + feed id, under the resolved lock)
+ * and return the one with the greatest decoded **`publishTimeUnix`**.
  *
- * This is the “fast path” used by transaction drafters that only need **one** oracle cell (latest),
- * avoiding the drain-then-sort behaviour of “collect all + sort”.
+ * Indexer ordering (`"desc"` by block / tx index) does **not** track oracle freshness:
+ * the authenticated `publish_time` carried in `OracleData` is the only correct ordering
+ * key, and update transactions can land out of `publish_time` order. We therefore scan
+ * every match and pick by decoded publish time.
+ *
+ * Tie-break: when multiple cells share the maximum `publishTimeUnix`, the first one
+ * yielded by the indexer (`desc` order) wins, keeping selection deterministic.
+ *
+ * Malformed candidate `cell_data` is treated as deployment/index corruption and surfaces
+ * as a `LeanOracleSdkError` whose **message** names the offending out-point and whose
+ * **`cause`** carries the original `LeanOracleCellDataDecodeError`, rather than being
+ * silently skipped — silently skipping could let a stale-but-valid cell shadow what
+ * should be a louder failure mode.
  *
  * @public
  */
@@ -74,13 +85,33 @@ export async function findLatestOracleLiveCellForFeed(
   );
   const pageLimit = options.pageLimit ?? DEFAULT_FIND_PAGE_LIMIT;
 
-  const searchKey = {
-    script: oracleLock,
-    scriptType: "lock" as const,
-    scriptSearchMode: "exact" as const,
-    filter: { script: oracleType },
-    withData: true as const,
-  };
+  const searchKey = options.oracleLockScript
+    ? {
+        /*
+         * Case A: Explicit lock provided. We search within this owner/lock domain
+         * as the primary anchor and filter for the oracle type + feed.
+         */
+        script: oracleLock,
+        scriptType: "lock" as const,
+        scriptSearchMode: "exact" as const,
+        filter: { script: oracleType },
+        withData: true as const,
+      }
+    : {
+        /*
+         * Case B: Using default public lock. The oracle type script (with feed id)
+         * is the more selective anchor, so we use it as the primary search script
+         * and filter by the public lock.
+         */
+        script: oracleType,
+        scriptType: "type" as const,
+        scriptSearchMode: "exact" as const,
+        filter: { script: oracleLock },
+        withData: true as const,
+      };
+
+  let best: LeanOracleLiveCellLike | undefined;
+  let bestPublishTime: bigint | undefined;
 
   for await (const cell of client.findCells(searchKey, "desc", pageLimit)) {
     if (options.signal?.aborted) {
@@ -90,21 +121,38 @@ export async function findLatestOracleLiveCellForFeed(
     }
 
     const oracleDataHex = cell.outputData;
-    const decoded = decodeLeanOracleCellDataHex(oracleDataHex);
+    let publishTimeUnix: bigint;
+    try {
+      ({ publishTimeUnix } = decodeLeanOracleCellDataHex(oracleDataHex));
+    } catch (cause) {
+      throw new LeanOracleSdkError(
+        `Malformed oracle cell_data at ${cell.outPoint.txHash}:${cell.outPoint.index.toString()} for feed ${feedId}: ` +
+          `cannot determine publish time during latest-cell selection`,
+        { cause },
+      );
+    }
+
     if (
       options.minPublishTimeUnix !== undefined &&
-      decoded.publishTimeUnix < options.minPublishTimeUnix
+      publishTimeUnix < options.minPublishTimeUnix
     ) {
       continue;
     }
 
-    return {
-      outPoint: { txHash: cell.outPoint.txHash, index: cell.outPoint.index },
-      oracleDataHex,
-    };
+    /*
+     * Strict `>` keeps the first-seen cell on ties; combined with `desc` indexer
+     * order this is deterministic across runs against the same chain state.
+     */
+    if (bestPublishTime === undefined || publishTimeUnix > bestPublishTime) {
+      bestPublishTime = publishTimeUnix;
+      best = {
+        outPoint: { txHash: cell.outPoint.txHash, index: cell.outPoint.index },
+        oracleDataHex,
+      };
+    }
   }
 
-  return undefined;
+  return best;
 }
 
 function resolveOracleLockForQuery(
@@ -116,7 +164,7 @@ function resolveOracleLockForQuery(
     return Script.from(explicit);
   }
 
-  const preset = deployment.defaultPublicOracleLockScript;
+  const preset = deployment.defaultPublicOracleLock.script;
   return Script.from({
     codeHash: preset.codeHash,
     hashType: preset.hashType,
@@ -131,10 +179,11 @@ function buildOracleTypeScript(
   deployment: LeanOracleDeployment,
   feedId: FeedIdHex,
 ): Script {
-  const hash = deployment.oracleTypeScriptCodeHash;
+  const identity = deployment.oracleType;
+  const hash = identity.codeHash;
   if (!hash?.trim()) {
     throw new LeanOracleSdkError(
-      "`deployment.oracleTypeScriptCodeHash` is required to locate oracle cells via the indexer",
+      "`deployment.oracleType.codeHash` is required to locate oracle cells via the indexer",
     );
   }
 
@@ -150,7 +199,7 @@ function buildOracleTypeScript(
      * **Type-scripts** validating **`oracle_script`** cell data are usually deployed as **`hashType: type`**, but curated
      * deployments pinning **`data*`** hashing must flip this field accordingly.
      */
-    hashType: deployment.oracleTypeScriptHashType ?? "type",
+    hashType: identity.hashType ?? "type",
     args: argsHex,
   });
 }

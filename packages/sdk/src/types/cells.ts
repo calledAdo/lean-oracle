@@ -1,7 +1,7 @@
 import type { FeedIdHex, HexString } from "./hex.js";
 import type { LeanOracleCellOutPoint } from "./deployment.js";
 
-/** Raw `cell_data` bytes for an oracle payload (typically 156-byte `OracleData`). */
+/** Raw `cell_data` bytes for an oracle payload (typically 152-byte `OracleData`). */
 export type LeanOracleCellDataHex = HexString;
 
 /**
@@ -41,8 +41,6 @@ export interface LeanOracleDecodedCellData {
   emaPrice: bigint;
   /** EMA confidence (**`ema_conf`**). */
   emaConf: bigint;
-  /** Wormhole guardian-set index (**must match embedded VAA** on pull updates). */
-  guardianSetIndex: number;
   /** Wormhole emitter chain id carried in **`OracleData`**. */
   emitterChain: number;
   /** 32-byte Wormhole emitter address (`0x` + 64 hex). */

@@ -15,10 +15,12 @@ const DEPLOYMENT_ROOT = path.resolve(__dirname, "..");
 const ACTIONS: DeploymentAction[] = [
   "deploy:guardian-set-type",
   "deploy:oracle-type",
+  "deploy:owned-type-bind-lock",
   "deploy:guardian-set",
   "deploy:oracle",
   "promote:guardian-set-type",
   "promote:oracle-type",
+  "promote:owned-type-bind-lock",
   "validate:config",
 ];
 

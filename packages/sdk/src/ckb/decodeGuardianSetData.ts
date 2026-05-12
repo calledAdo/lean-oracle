@@ -4,6 +4,10 @@
  * Guardian sets are stored on-chain as a dedicated cell whose **data** matches
  * Rust `GuardianSetData` (`contracts/common/src/guardian_set.rs`).
  *
+ * **Current-set-only policy**: lifecycle fields are not present in the byte
+ * layout. Only the active canonical guardian set is accepted for oracle
+ * verification; after rotation, callers must use Hermes data signed by the new set.
+ *
  * The oracle script loads this cell from **`CellDep`** and uses it to verify the
  * Wormhole VAA signature quorum.
  */
@@ -11,42 +15,25 @@
 import { LeanOracleGuardianSetDataDecodeError } from "../errors.js";
 import type { LeanOracleGuardianSetData } from "../types/guardianSet.js";
 import type { HexString } from "../types/hex.js";
+import {
+  bytesToHex,
+  decodeHexFlexible as decodeHexInternal,
+} from "../internal/hex.js";
 
-/** Fixed header length before the variable-length guardian list begins. */
-export const GUARDIAN_SET_HEADER_BYTE_LENGTH = 60;
-
-function bytesToHex(bytes: Uint8Array): HexString {
-  let body = "";
-  for (let i = 0; i < bytes.length; i++) {
-    body += bytes[i]!.toString(16).padStart(2, "0");
-  }
-  return `0x${body}`;
-}
+/**
+ * Fixed header length before the variable-length guardian list: `set_index`,
+ * `quorum`, and `guardian_count` (each u32 LE).
+ */
+export const GUARDIAN_SET_HEADER_BYTE_LENGTH = 12;
 
 function decodeFlexibleHex(label: string, hex: HexString): Uint8Array {
-  const flattened = hex.trim().replace(/\s+/g, "");
-  const body = flattened.startsWith("0x") || flattened.startsWith("0X")
-    ? flattened.slice(2)
-    : flattened;
-
-  if (body.length % 2 !== 0) {
+  try {
+    return decodeHexInternal(hex);
+  } catch (e) {
     throw new LeanOracleGuardianSetDataDecodeError(
-      `${label}: hex length must be even (got ${String(body.length)} hex digits)`,
+      `${label}: ${(e as Error).message}`,
     );
   }
-
-  const out = new Uint8Array(body.length / 2);
-  for (let i = 0; i < body.length; i += 2) {
-    const slice = body.slice(i, i + 2);
-    const byte = Number.parseInt(slice, 16);
-    if (!Number.isFinite(byte) || byte < 0 || byte > 0xff) {
-      throw new LeanOracleGuardianSetDataDecodeError(
-        `${label}: invalid hex byte "${slice}" at digit offset ${String(i)}`,
-      );
-    }
-    out[i / 2] = byte;
-  }
-  return out;
 }
 
 /**
@@ -55,11 +42,8 @@ function decodeFlexibleHex(label: string, hex: HexString): Uint8Array {
  * Layout:
  * - `[0..4)` set_index (u32 LE)
  * - `[4..8)` quorum (u32 LE)
- * - `[8..16)` creation_time (u64 LE)
- * - `[16..24)` expiration_time (u64 LE)
- * - `[24..56)` governance_lock_hash (32 bytes)
- * - `[56..60)` guardian_count (u32 LE)
- * - `[60..]` guardian_count * 20 bytes of guardian addresses
+ * - `[8..12)` guardian_count (u32 LE)
+ * - `[12..]` `guardian_count` consecutive 20-byte guardian addresses
  *
  * @public
  */
@@ -75,10 +59,7 @@ export function decodeGuardianSetCellDataBytes(
   const dv = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
   const setIndex = dv.getUint32(0, true);
   const quorum = dv.getUint32(4, true);
-  const creationTimeUnix = dv.getBigUint64(8, true);
-  const expirationTimeUnix = dv.getBigUint64(16, true);
-  const governanceLockHash = bytesToHex(raw.subarray(24, 56));
-  const guardianCount = dv.getUint32(56, true);
+  const guardianCount = dv.getUint32(8, true);
 
   const expectedLen =
     GUARDIAN_SET_HEADER_BYTE_LENGTH + Number(guardianCount) * 20;
@@ -98,9 +79,6 @@ export function decodeGuardianSetCellDataBytes(
   return {
     setIndex,
     quorum,
-    creationTimeUnix,
-    expirationTimeUnix,
-    governanceLockHash,
     guardianAddresses,
   };
 }
@@ -116,4 +94,3 @@ export function decodeGuardianSetCellDataHex(
   const bytes = decodeFlexibleHex("Guardian set data hex", guardianSetDataHex);
   return decodeGuardianSetCellDataBytes(bytes);
 }
-

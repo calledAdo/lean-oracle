@@ -4,7 +4,7 @@
  * On-chain oracle state is stored verbatim as **`OracleData`** bytes in each oracle cell's
  * **`outputs_data`** / live **`data`** field — see **`contracts/common/src/oracle_data.rs`**.
  *
- * Length is fixed at **`ORACLE_CELL_DATA_BYTE_LENGTH`** (`156`).
+ * Length is fixed at **`ORACLE_CELL_DATA_BYTE_LENGTH`** (`152`).
  * CCC / RPC returns data as **`0x`** hex blobs; indexer paths may expose **`Uint8Array`** —
  * both entry points converge on the same **`DataView`** read rules as Rust **`from_le_bytes`**.
  */
@@ -14,60 +14,29 @@ import type {
   LeanOracleCellDataHex,
   LeanOracleDecodedCellData,
 } from "../types/cells.js";
-import type { FeedIdHex, HexString } from "../types/hex.js";
+import type { FeedIdHex } from "../types/hex.js";
+import {
+  bytesToHex,
+  decodeHexExact as decodeHexInternal,
+} from "../internal/hex.js";
 
-/** Byte length of **`OracleData::to_bytes`** — same as Rust **`ORACLE_STATE_LEN`** (`156`). */
-export const ORACLE_CELL_DATA_BYTE_LENGTH = 156;
-
-/**
- * Decode lax hex (**`LeanOracleCellDataHex`**) copied from explorers or CCC output.
- *
- * Rejects odd-length digit strings / non-hex characters with **`LeanOracleCellDataDecodeError`**.
- *
- * Mirrors the permissive decoding style used elsewhere in this SDK (**`0x` optional**, collapses ASCII whitespace).
- */
-function decodeFlexibleHexOracleCell(label: string, hex: LeanOracleCellDataHex): Uint8Array {
-  const flattened = hex.trim().replace(/\s+/g, "");
-  const body = flattened.startsWith("0x") || flattened.startsWith("0X")
-    ? flattened.slice(2)
-    : flattened;
-
-  if (body.length % 2 !== 0) {
-    throw new LeanOracleCellDataDecodeError(
-      `${label}: hex length must be even (got ${String(body.length)} hex digits)`,
-    );
-  }
-
-  const byteLen = body.length / 2;
-  if (byteLen !== ORACLE_CELL_DATA_BYTE_LENGTH) {
-    throw new LeanOracleCellDataDecodeError(
-      `${label}: expected ${String(ORACLE_CELL_DATA_BYTE_LENGTH)} data bytes (${String(ORACLE_CELL_DATA_BYTE_LENGTH * 2)} hex digits), decoded ${String(byteLen)}`,
-    );
-  }
-
-  const out = new Uint8Array(ORACLE_CELL_DATA_BYTE_LENGTH);
-  for (let i = 0; i < body.length; i += 2) {
-    const slice = body.slice(i, i + 2);
-    const byte = Number.parseInt(slice, 16);
-    if (!Number.isFinite(byte) || byte < 0 || byte > 0xff) {
-      throw new LeanOracleCellDataDecodeError(
-        `${label}: invalid hex byte "${slice}" at digit offset ${String(i)}`,
-      );
-    }
-    out[i / 2] = byte;
-  }
-  return out;
-}
+/** Byte length of **`OracleData::to_bytes`** — same as Rust **`ORACLE_STATE_LEN`** (`152`). */
+export const ORACLE_CELL_DATA_BYTE_LENGTH = 152;
 
 /**
- * Canonical **`0x` + lowercase nibbles** for a byte view (deterministic fingerprints / map keys).
+ * Decode lax hex (**`LeanOracleCellDataHex`**) and enforce oracle data length.
  */
-function bytesToHex(bytes: Uint8Array): HexString {
-  let body = "";
-  for (let i = 0; i < bytes.length; i++) {
-    body += bytes[i]!.toString(16).padStart(2, "0");
+function decodeFlexibleHexOracleCell(
+  label: string,
+  hex: LeanOracleCellDataHex,
+): Uint8Array {
+  try {
+    return decodeHexInternal(hex, ORACLE_CELL_DATA_BYTE_LENGTH);
+  } catch (e) {
+    throw new LeanOracleCellDataDecodeError(
+      `${label}: ${(e as Error).message}`,
+    );
   }
-  return `0x${body}`;
 }
 
 /**
@@ -86,9 +55,8 @@ function bytesToHex(bytes: Uint8Array): HexString {
  * | **`92..100`** | **`prev_publish_time`** (`u64`) |
  * | **`100..108`** | **`ema_price`** (`i64`) |
  * | **`108..116`** | **`ema_conf`** (`u64`) |
- * | **`116..120`** | **`guardian_set_index`** (`u32`) |
- * | **`120..124`** | **`emitter_chain`** (`u32`) |
- * | **`124..156`** | **`emitter_address`** (32 bytes) |
+ * | **`116..120`** | **`emitter_chain`** (`u32`) |
+ * | **`120..152`** | **`emitter_address`** (32 bytes) |
  *
  * @public
  */
@@ -120,9 +88,8 @@ export function decodeOracleCellDataBytes(
   const prevPublishTimeUnix = dv.getBigUint64(92, true);
   const emaPrice = dv.getBigInt64(100, true);
   const emaConf = dv.getBigUint64(108, true);
-  const guardianSetIndex = dv.getUint32(116, true);
-  const emitterChain = dv.getUint32(120, true);
-  const emitterAddressBytes = raw.subarray(124, 156);
+  const emitterChain = dv.getUint32(116, true);
+  const emitterAddressBytes = raw.subarray(120, 152);
 
   return {
     feedId: bytesToHex(feedIdBytes) as FeedIdHex,
@@ -134,7 +101,6 @@ export function decodeOracleCellDataBytes(
     prevPublishTimeUnix,
     emaPrice,
     emaConf,
-    guardianSetIndex,
     emitterChain,
     emitterAddress: bytesToHex(emitterAddressBytes),
   };

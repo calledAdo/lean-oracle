@@ -64,10 +64,20 @@ export async function runDeploymentAction(
           scriptFamily: "oracle-type",
         }),
       };
+    case "deploy:owned-type-bind-lock":
+      return {
+        ...codeDeploymentPayload("owned-type-bind-lock"),
+        latestCandidate: await deployCodeScript({
+          ctx,
+          scriptFamily: "owned-type-bind-lock",
+        }),
+      };
     case "promote:guardian-set-type":
       return promoteCodeDeployment(ctx, "guardian-set-type");
     case "promote:oracle-type":
       return promoteCodeDeployment(ctx, "oracle-type");
+    case "promote:owned-type-bind-lock":
+      return promoteCodeDeployment(ctx, "owned-type-bind-lock");
     case "deploy:guardian-set":
       return deployGuardianSetStateCell({ ctx });
     case "deploy:oracle":

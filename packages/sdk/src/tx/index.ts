@@ -5,14 +5,28 @@ export type {
 } from "./readDeps.js";
 export { attachOraclePullUpdate } from "./pullUpdate.js";
 export type { OraclePullUpdateParams, OraclePullUpdateResult } from "./pullUpdate.js";
+export { attachOracleDeploy } from "./deployOracle.js";
+export type {
+  OracleDeployParams,
+  OracleDeployResult,
+  OracleDeployInitialPrice,
+} from "./deployOracle.js";
+export { attachOracleBurn } from "./burnOracle.js";
+export type { OracleBurnParams, OracleBurnResult } from "./burnOracle.js";
 export {
   initiateOracleUpdateTx,
   initiateReadOracleTx,
+  initiateOracleDeployTx,
+  initiateOracleBurnTx,
 } from "./workflows.js";
 export type {
   InitiateOracleUpdateParams,
   InitiateReadOracleTxParams,
+  InitiateOracleDeployTxParams,
+  InitiateOracleBurnTxParams,
 } from "./workflows.js";
+// Oracle workflows that internally rebalance fees. The fee/fuel primitives
+// themselves live under `lean-oracle-sdk/fuel`.
 export {
   composePullUpdateWithFeeRebalance,
   composeReadDepsWithFeeRebalance,
@@ -21,17 +35,3 @@ export type {
   CombinedPullUpdateAndFeesParams,
   CombinedReadDepsAndFeesParams,
 } from "./pipeline.js";
-export { rebalanceTransactionFeeAfterOracleMutation } from "./rebalanceFees.js";
-export type {
-  LeanOracleFeeRebalanceContext,
-  LeanOracleFeeRebalanceResult,
-  LeanOracleFuelCellCandidate,
-  LeanOracleFeeRebalanceShortfall,
-  LeanOracleFeeRebalanceSuccess,
-} from "./rebalanceFees.js";
-export {
-  MIN_CELL_CAPACITY_SHANNONS,
-  collectPlainFuelCellsByLock,
-  computeCumulativeNetCapacityShannons,
-  rebalanceFuel,
-} from "./rebalanceFees.js";

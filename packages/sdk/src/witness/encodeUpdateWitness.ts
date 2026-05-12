@@ -4,7 +4,7 @@
  * Witness layout matches Rust **`OracleUpdateWitness::to_bytes`**
  * (`contracts/common/src/oracle_witness.rs` in **`lean-oracle`**).
  *
- * **`oracle_script`** loads the group-input witness **`lock`** field and parses
+ * **`oracle_script`** loads the group-input witness **`input_type`** field and parses
  * **`OracleUpdateWitness::from_bytes`**:
  *
  * - **4 bytes** — `accumulator_update.len()` as **`u32` little-endian**.
@@ -14,60 +14,20 @@
 
 import { LeanOracleWitnessEncodingError } from "../errors.js";
 import type { HexString } from "../types/hex.js";
+import { decodeHexFlexible as decodeHexInternal } from "../internal/hex.js";
 
 /** Maximum accumulator payload size (`u32`) — matches CKB **`read_u32_le`** truncation semantics. */
 const MAX_ACCUMULATOR_LEN = 0xffffffff;
 
 /**
  * Decode a lax hex literal into bytes (Hermes blobs are often **`504e4155…`** without `0x`).
- *
- * - Strips ASCII whitespace everywhere (Hermes tooling sometimes pretty-prints with newlines).
- * - Optional **`0x` / `0X`** prefix.
- * - Rejects odd-length nibbles / non-hex characters with **`LeanOracleWitnessEncodingError`**.
  */
 function decodeHexFlexible(label: string, hex: HexString): Uint8Array {
-  /*
-   * Collapse stray whitespace copied from explorers / jq output so clients don’t
-   * brittle-fail on formatting alone.
-   */
-  const flattened = hex.trim().replace(/\s+/g, "");
-  const body =
-    flattened.startsWith("0x") || flattened.startsWith("0X")
-      ? flattened.slice(2)
-      : flattened;
-
-  if (body.length % 2 !== 0) {
-    throw new LeanOracleWitnessEncodingError(
-      `${label}: hex string length must be even (${String(body.length)} nibbles)`,
-    );
+  try {
+    return decodeHexInternal(hex);
+  } catch (e) {
+    throw new LeanOracleWitnessEncodingError(`${label}: ${(e as Error).message}`);
   }
-
-  const out = new Uint8Array(body.length / 2);
-  /**
-   * Why loop through the entire `body`? Is there a better way?
-   *
-   * The loop processes each hex pair into a byte, since JavaScript's `Uint8Array.from` does
-   * not natively support creating from a hex string, and Buffer usage is usually eschewed in cross-platform JS.
-   *
-   * This is a standard approach for most small-to-medium sized blobs—Hermes accumulator
-   * hex strings are typically ~1-4KB, rarely approaching the many-MB range, so the O(n)
-   * loop is not a practical bottleneck (and avoids Node-only shims).
-   *
-   * For alternatives: Buffer.from(body, "hex") is faster but not portable to browsers and throws
-   * on invalid hex. For purely browser environments, one could use typed array tricks, but validation
-   * is less user-friendly than with this manual step.
-   */
-  for (let i = 0; i < body.length; i += 2) {
-    const slice = body.slice(i, i + 2);
-    const byte = Number.parseInt(slice, 16);
-    if (!Number.isFinite(byte) || byte < 0 || byte > 0xff) {
-      throw new LeanOracleWitnessEncodingError(
-        `${label}: invalid hex byte literal "${slice}" at offset ${String(i)}`,
-      );
-    }
-    out[i / 2] = byte;
-  }
-  return out;
 }
 
 /**
@@ -118,10 +78,10 @@ export function encodeOracleUpdateWitnessFromAccumulatorBytes(
  * ```typescript
  * const env = await fetchHermesLatestPriceUpdates(network, [feed]);
  * assert(env.binary.encoding === "hex");
- * const witnessLock = encodeOracleUpdateWitnessFromAccumulatorHex(env.binary.data[0]);
+ * const oracleWitness = encodeOracleUpdateWitnessFromAccumulatorHex(env.binary.data[0]);
  * ```
  *
- * CCC then places **`witnessLock`** into the oracle cell lock witness field wired to **`oracle_script`**.
+ * CCC then places **`oracleWitness`** into the oracle cell **`input_type`** witness field wired to **`oracle_script`**.
  *
  * @public
  */

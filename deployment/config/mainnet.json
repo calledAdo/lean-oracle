@@ -3,7 +3,8 @@
   "build": {
     "target": "riscv64imac-unknown-none-elf",
     "oracleBinaryPath": "crates/lean_oracle/target/riscv64imac-unknown-none-elf/release/oracle_type",
-    "guardianSetBinaryPath": "crates/lean_oracle/target/riscv64imac-unknown-none-elf/release/guardian_set_type"
+    "guardianSetBinaryPath": "crates/lean_oracle/target/riscv64imac-unknown-none-elf/release/guardian_set_type",
+    "ownedTypeBindLockBinaryPath": "crates/lean_oracle/target/riscv64imac-unknown-none-elf/release/owned_type_bind_lock"
   },
   "guardianSet": {
     "setIndex": 6,

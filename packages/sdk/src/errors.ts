@@ -68,7 +68,7 @@ export class LeanOracleWitnessEncodingError extends LeanOracleSdkError {
 }
 
 /**
- * Oracle **`cell_data`** length or hex layout does not match **`OracleData`** (`156` bytes).
+ * Oracle **`cell_data`** length or hex layout does not match **`OracleData`** (`152` bytes).
  *
  * @public
  */
@@ -80,7 +80,8 @@ export class LeanOracleCellDataDecodeError extends LeanOracleSdkError {
 }
 
 /**
- * Guardian-set cell **`data`** did not match the expected on-chain `GuardianSetData` layout.
+ * Guardian-set cell **`data`** did not match the expected on-chain `GuardianSetData` layout
+ * (12-byte little-endian header plus `guardian_count * 20` address bytes; no trailing data).
  *
  * @public
  */

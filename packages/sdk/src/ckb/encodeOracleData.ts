@@ -5,33 +5,53 @@
  * `oracle_script` — Rust `OracleData::to_bytes` (`contracts/common/src/oracle_data.rs`).
  *
  * This module is used when drafting **update** transactions:
- * - witness contains the raw Hermes accumulator blob
- * - output cell data must mirror the price message extracted by the script
+ * - witness carries the raw Hermes **`binary`** accumulator blob — this is the *only*
+ *   payload the on-chain `oracle_script` cryptographically verifies.
+ * - output cell data must mirror the price message the script extracts from `binary`.
  *
- * For the first TS implementation we fill numeric fields from **Hermes `parsed`**.
- * If `parsed` ever disagrees with `binary`, the transaction will be rejected on-chain.
+ * **Off-chain construction:** two builders are provided, selected by the
+ * caller-controlled `outputSource` option (default `"hermes-parsed"`):
+ *
+ * - {@link buildOracleOutputFromHermesParsed} reads numeric fields from
+ *   Hermes `parsed` — cheap and the historical default.
+ * - {@link buildOracleOutputFromHermesBinary} parses `binary.data[0]` with
+ *   the SDK's narrow PNAU parser (see `../hermes/parseAccumulator.ts`) and
+ *   reads numeric fields from the decoded price-feed message.
+ *
+ * Neither off-chain source is a cryptographic authority. The on-chain
+ * `oracle_script` re-derives the fields from `binary` and rejects the tx if
+ * they disagree, regardless of which builder was used.
+ *
+ * The TS parser is intentionally narrow: it extracts the price-feed message
+ * fields needed for the output cell and does **not** verify the embedded
+ * Wormhole VAA signatures or the Pyth Merkle proof. Both are performed
+ * on-chain against the same `binary` bytes the SDK echoes into the witness.
  */
 
 import { LeanOracleOracleDataEncodeError } from "../errors.js";
 import { normalizePythFeedId } from "../hermes/client.js";
+import { parseAccumulatorBytesForFeed } from "../hermes/parseAccumulator.js";
 import type { LeanOracleDecodedCellData } from "../types/cells.js";
 import type { FeedIdHex, HexString } from "../types/hex.js";
-import type { HermesBinaryUpdateEnvelope, HermesParsedPriceTouch } from "../types/hermes.js";
+import type {
+  HermesBinaryUpdateEnvelope,
+  HermesParsedPriceTouch,
+  OracleUpdateOutputSource,
+} from "../types/hermes.js";
 import { ORACLE_CELL_DATA_BYTE_LENGTH } from "./decodeOracleData.js";
+import {
+  decodeHexExact as decodeHexInternal,
+  decodeHexFlexible,
+} from "../internal/hex.js";
 
 function decodeHex32Strict(label: string, hex: HexString): Uint8Array {
-  const trimmed = hex.trim().toLowerCase();
-  const body = trimmed.startsWith("0x") ? trimmed.slice(2) : trimmed;
-  if (!/^[0-9a-f]{64}$/.test(body)) {
+  try {
+    return decodeHexInternal(hex, 32);
+  } catch (e) {
     throw new LeanOracleOracleDataEncodeError(
-      `${label}: expected 32-byte hex (0x + 64 nibbles), got "${hex}"`,
+      `${label}: ${(e as Error).message}`,
     );
   }
-  const out = new Uint8Array(32);
-  for (let i = 0; i < 64; i += 2) {
-    out[i / 2] = Number.parseInt(body.slice(i, i + 2), 16);
-  }
-  return out;
 }
 
 function bigIntFromHermesDecimal(label: string, s: string): bigint {
@@ -99,7 +119,7 @@ export function encodeOracleCellDataBytes(
   // Fixed-width slabs.
   out.set(decodeHex32Strict("feedId", oracle.feedId), 0);
   out.set(decodeHex32Strict("guardianSetTypeHash", oracle.guardianSetTypeHash), 32);
-  out.set(decodeHex32Strict("emitterAddress", oracle.emitterAddress), 124);
+  out.set(decodeHex32Strict("emitterAddress", oracle.emitterAddress), 120);
 
   // Scalars (little-endian).
   dv.setBigInt64(64, requireI64("price", oracle.price), true);
@@ -109,8 +129,7 @@ export function encodeOracleCellDataBytes(
   dv.setBigUint64(92, requireU64("prevPublishTimeUnix", oracle.prevPublishTimeUnix), true);
   dv.setBigInt64(100, requireI64("emaPrice", oracle.emaPrice), true);
   dv.setBigUint64(108, requireU64("emaConf", oracle.emaConf), true);
-  dv.setUint32(116, requireU32("guardianSetIndex", oracle.guardianSetIndex), true);
-  dv.setUint32(120, requireU32("emitterChain", oracle.emitterChain), true);
+  dv.setUint32(116, requireU32("emitterChain", oracle.emitterChain), true);
 
   return out;
 }
@@ -125,7 +144,11 @@ export function pickHermesParsedTouchForFeed(
   const parsed = envelope.parsed;
   if (!parsed || parsed.length === 0) {
     throw new LeanOracleOracleDataEncodeError(
-      "Hermes response missing `parsed` field; cannot populate oracle output without parsing `binary` yet",
+      "Hermes response is missing the `parsed` field. " +
+        "The default SDK update drafter (`outputSource: \"hermes-parsed\"`) reads oracle output cell fields (price/conf/expo/publish_time/...) from Hermes `parsed`. " +
+        "On-chain verification still uses the Hermes `binary` accumulator embedded in the witness. " +
+        "Re-fetch with Hermes `parsed` enabled, supply a `hermesEnvelope` that already includes `parsed`, " +
+        "or pass `outputSource: \"binary\"` to derive output fields from `binary.data[0]` instead.",
     );
   }
   const normalized = normalizePythFeedId(feedId);
@@ -140,7 +163,7 @@ export function pickHermesParsedTouchForFeed(
 
 /**
  * Build the **new** oracle output state by combining:
- * - **static config fields** from the existing oracle cell (guardian type hash/index, emitter fields)
+ * - **static config fields** from the existing oracle cell (guardian type hash, emitter fields)
  * - **dynamic price fields** from Hermes `parsed`
  *
  * @public
@@ -182,7 +205,6 @@ export function buildOracleOutputFromHermesParsed(
     // static / identity fields (must remain unchanged for a valid update)
     feedId: inputOracle.feedId,
     guardianSetTypeHash: inputOracle.guardianSetTypeHash,
-    guardianSetIndex: inputOracle.guardianSetIndex,
     emitterChain: inputOracle.emitterChain,
     emitterAddress: inputOracle.emitterAddress,
 
@@ -195,5 +217,144 @@ export function buildOracleOutputFromHermesParsed(
     emaPrice,
     emaConf,
   };
+}
+
+/**
+ * Build the **new** oracle output state by combining:
+ * - **static config fields** from the existing oracle cell (guardian type hash, emitter fields)
+ * - **dynamic price fields** parsed from the Hermes **`binary`** accumulator
+ *   (`hermesEnvelope.binary.data[0]`)
+ *
+ * Use this when you want the SDK to derive output fields directly from the
+ * accumulator bytes the contract verifies, instead of trusting Hermes
+ * `parsed`. The witness still carries the same `binary.data[0]`; only the
+ * source of the *output cell* fields changes.
+ *
+ * Throws {@link LeanOracleOracleDataEncodeError} if the binary blob is
+ * malformed or does not contain `feedId`.
+ *
+ * @public
+ */
+export function buildOracleOutputFromHermesBinary(
+  inputOracle: LeanOracleDecodedCellData,
+  hermesEnvelope: HermesBinaryUpdateEnvelope,
+  feedId: FeedIdHex,
+): LeanOracleDecodedCellData {
+  const first = hermesEnvelope.binary?.data?.[0];
+  if (!first) {
+    throw new LeanOracleOracleDataEncodeError(
+      "Hermes envelope missing `binary.data[0]`; cannot derive oracle output from binary accumulator",
+    );
+  }
+
+  let bytes: Uint8Array;
+  if (hermesEnvelope.binary.encoding === "hex") {
+    try {
+      bytes = decodeHexFlexible(first);
+    } catch (cause) {
+      throw new LeanOracleOracleDataEncodeError(
+        `Hermes binary.data[0] is not valid hex: ${(cause as Error).message}`,
+        { cause },
+      );
+    }
+  } else {
+    bytes = decodeBase64ToBytes(first);
+  }
+
+  let parsed;
+  try {
+    parsed = parseAccumulatorBytesForFeed(bytes, feedId);
+  } catch (cause) {
+    throw new LeanOracleOracleDataEncodeError(
+      `Failed to parse Hermes binary accumulator for feed ${normalizePythFeedId(feedId)}: ${(cause as Error).message}`,
+      { cause },
+    );
+  }
+
+  return {
+    feedId: inputOracle.feedId,
+    guardianSetTypeHash: inputOracle.guardianSetTypeHash,
+    emitterChain: inputOracle.emitterChain,
+    emitterAddress: inputOracle.emitterAddress,
+    price: parsed.price,
+    conf: parsed.conf,
+    expo: parsed.expo,
+    publishTimeUnix: parsed.publishTimeUnix,
+    prevPublishTimeUnix: parsed.prevPublishTimeUnix,
+    emaPrice: parsed.emaPrice,
+    emaConf: parsed.emaConf,
+  };
+}
+
+function decodeBase64ToBytes(input: string): Uint8Array {
+  if (typeof globalThis.atob === "function") {
+    const bin = globalThis.atob(input);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const buf = (globalThis as any).Buffer?.from?.(input, "base64") as
+    | Uint8Array
+    | undefined;
+  if (buf) return new Uint8Array(buf);
+  throw new LeanOracleOracleDataEncodeError(
+    "Base64 decoding unavailable in this runtime (no atob/Buffer)",
+  );
+}
+
+/**
+ * Parameters for the unified Hermes oracle output builder.
+ *
+ * @public
+ */
+export interface BuildOracleOutputFromHermesUpdateParams {
+  /** Decoded view of the existing oracle cell whose static config fields are preserved. */
+  inputOracle: LeanOracleDecodedCellData;
+  /** Hermes update envelope (`binary` always required; `parsed` required for the default mode). */
+  hermesEnvelope: HermesBinaryUpdateEnvelope;
+  /** Target Pyth feed id. */
+  feedId: FeedIdHex;
+  /**
+   * How to derive the dynamic price fields. Defaults to `"hermes-parsed"`,
+   * matching {@link draftOracleUpdateTx}. See {@link OracleUpdateOutputSource}.
+   *
+   * No silent fallback between modes: each path requires its own input
+   * (`parsed` for `"hermes-parsed"`, valid `binary.data[0]` containing the
+   * target feed for `"binary"`).
+   */
+  outputSource?: OracleUpdateOutputSource;
+}
+
+/**
+ * Unified Hermes oracle output builder used by SDK update drafting.
+ *
+ * Dispatches to {@link buildOracleOutputFromHermesParsed} (default) or
+ * {@link buildOracleOutputFromHermesBinary} based on `outputSource`. Static
+ * config fields (`feedId`, `guardianSetTypeHash`, `emitterChain`,
+ * `emitterAddress`) are always taken from `inputOracle`; only the dynamic
+ * price fields come from the selected source.
+ *
+ * @public
+ */
+export function buildOracleOutputFromHermesUpdate(
+  params: BuildOracleOutputFromHermesUpdateParams,
+): LeanOracleDecodedCellData {
+  const source: OracleUpdateOutputSource =
+    params.outputSource ?? "hermes-parsed";
+
+  if (source === "binary") {
+    return buildOracleOutputFromHermesBinary(
+      params.inputOracle,
+      params.hermesEnvelope,
+      params.feedId,
+    );
+  }
+
+  return buildOracleOutputFromHermesParsed(
+    params.inputOracle,
+    params.hermesEnvelope,
+    params.feedId,
+  );
 }
 

@@ -1,19 +1,76 @@
 {
-  "name": "lean-oracle-sdk-placeholder",
-  "version": "0.0.0",
-  "description": "TypeScript SDK for the Lean Oracle on CKB (testnet and mainnet).",
+  "name": "lean-oracle-sdk",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for the Lean Oracle on CKB testnet.",
   "license": "MIT",
+  "author": "calledAdo <destinyadokiye8@gmail.com>",
+  "homepage": "https://github.com/calledAdo/lean-oracle#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/calledAdo/lean-oracle.git",
+    "directory": "packages/sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/calledAdo/lean-oracle/issues"
+  },
+  "keywords": [
+    "ckb",
+    "nervos",
+    "oracle",
+    "pyth",
+    "hermes",
+    "price-feed",
+    "lean-oracle",
+    "blockchain",
+    "sdk"
+  ],
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./ckb": {
+      "types": "./dist/ckb/index.d.ts",
+      "import": "./dist/ckb/index.js"
+    },
+    "./tx": {
+      "types": "./dist/tx/index.d.ts",
+      "import": "./dist/tx/index.js"
+    },
+    "./fuel": {
+      "types": "./dist/fuel/index.d.ts",
+      "import": "./dist/fuel/index.js"
+    },
+    "./hermes": {
+      "types": "./dist/hermes/index.d.ts",
+      "import": "./dist/hermes/index.js"
+    },
+    "./presets": {
+      "types": "./dist/presets/index.d.ts",
+      "import": "./dist/presets/index.js"
+    },
+    "./advanced": {
+      "types": "./dist/advanced.d.ts",
+      "import": "./dist/advanced.js"
+    },
+    "./package.json": "./package.json"
+  },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsc -p .",
     "clean": "rimraf dist",
-    "prepublishOnly": "npm run clean && npm run build"
+    "prepublishOnly": "npm run clean && npm run release:check",
+    "test": "npm run build && node tests/decodeGuardianSetData.fixture.mjs && node tests/decodeOracleData.fixture.mjs && node tests/encodeOracleData.fixture.mjs && node tests/witnessEncoding.fixture.mjs && node tests/hermesUrls.fixture.mjs && node tests/findLatestOracleLiveCellForFeed.fixture.mjs && node tests/guardianDep.fixture.mjs && node tests/rebalanceFees.fixture.mjs && node tests/txBuilders.fixture.mjs && node tests/clientCccInjection.fixture.mjs && node tests/getOracleCellState.fixture.mjs && node tests/parseAccumulator.fixture.mjs && node tests/hermesTransportError.fixture.mjs && node tests/feedCatalog.fixture.mjs && node tests/oracleVersionPreset.fixture.mjs && node tests/rootApiBoundary.fixture.mjs",
+    "test:pack": "npm run build && node tests/tarballExports.fixture.mjs",
+    "release:check": "npm test && npm run test:pack",
+    "test:integration:devnet": "npm run build && npm --prefix ../../deployment run build && node --env-file=.env tests/integration/devnet/sdk-devnet.test.mjs && node --env-file=.env tests/integration/devnet/sdk-devnet-deploy-burn.test.mjs && node --env-file=.env tests/integration/devnet/sdk-devnet-negative.test.mjs && node --env-file=.env tests/integration/devnet/sdk-devnet-versioning.test.mjs"
   },
   "dependencies": {
     "@ckb-ccc/core": "^1.12.2"
@@ -22,6 +79,9 @@
     "@types/node": "^22.13.0",
     "rimraf": "^6.0.1",
     "typescript": "^5.8.0"
+  },
+  "engines": {
+    "node": ">=18"
   },
   "publishConfig": {
     "access": "public"

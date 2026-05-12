@@ -57,6 +57,7 @@ export function validateConfigPreflight(args: {
   const allowedTargets = new Set([
     "deploy:guardian-set-type",
     "deploy:oracle-type",
+    "deploy:owned-type-bind-lock",
     "deploy:guardian-set",
     "deploy:oracle",
   ]);
@@ -111,10 +112,13 @@ export function validateConfigPreflight(args: {
   }
 
   const artifactsDir = path.join(args.deploymentRoot, "artifacts");
-  const codeArtifactPath = (family: "guardian-set-type" | "oracle-type") =>
-    path.join(artifactsDir, `${network}.${family}.json`);
+  const codeArtifactPath = (
+    family: "guardian-set-type" | "oracle-type" | "owned-type-bind-lock",
+  ) => path.join(artifactsDir, `${network}.${family}.json`);
 
-  function checkCanonicalCodeArtifact(family: "guardian-set-type" | "oracle-type") {
+  function checkCanonicalCodeArtifact(
+    family: "guardian-set-type" | "oracle-type" | "owned-type-bind-lock",
+  ) {
     const p = codeArtifactPath(family);
     if (!fs.existsSync(p)) {
       out.push(fail(`missing code artifact: ${path.relative(args.deploymentRoot, p)}`));
@@ -134,8 +138,16 @@ export function validateConfigPreflight(args: {
     }
   }
 
-  if (targetAction === "deploy:guardian-set-type" || targetAction === "deploy:oracle-type") {
-    if (config?.build?.oracleBinaryPath && config?.build?.guardianSetBinaryPath) {
+  if (
+    targetAction === "deploy:guardian-set-type" ||
+    targetAction === "deploy:oracle-type" ||
+    targetAction === "deploy:owned-type-bind-lock"
+  ) {
+    if (
+      config?.build?.oracleBinaryPath &&
+      config?.build?.guardianSetBinaryPath &&
+      config?.build?.ownedTypeBindLockBinaryPath
+    ) {
       out.push(ok("build config paths present in config"));
     } else {
       out.push(fail("build config paths missing in config.build"));
@@ -176,6 +188,7 @@ export function validateConfigPreflight(args: {
     if (validateHexBytes("ORACLE_EMITTER_ADDRESS", args.env.ORACLE_EMITTER_ADDRESS, 32).length === 0) out.push(ok("ORACLE_EMITTER_ADDRESS valid"));
 
     checkCanonicalCodeArtifact("oracle-type");
+    checkCanonicalCodeArtifact("owned-type-bind-lock");
 
     const gsStatePath = path.join(artifactsDir, `${network}.deploy-guardian-set.json`);
     if (!fs.existsSync(gsStatePath)) {

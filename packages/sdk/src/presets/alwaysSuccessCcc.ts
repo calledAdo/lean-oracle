@@ -7,16 +7,15 @@
 
 import type {
   LeanOracleCellOutPoint,
-  LeanOracleExplicitLockPreset,
+  LeanOracleScriptIdentity,
 } from "../types/deployment.js";
 
 /**
- * Lock script triple shared by CKB public testnet + mainnet presets (empty args).
+ * Lock script identity shared by CKB public testnet + mainnet presets (empty args).
  *
- * Drop into **`LeanOracleDeployment.defaultPublicOracleLockScript`** when your **`Client`**
- * cannot resolve **`getKnownScript(AlwaysSuccess)`**.
+ * This matches the built-in AlwaysSuccess logic in most environments.
  */
-export const leanOracleCccAlwaysSuccessLockPreset: LeanOracleExplicitLockPreset = {
+export const leanOracleCccAlwaysSuccessLockPreset: LeanOracleScriptIdentity = {
   codeHash:
     "0x3b521cc4b552f109d092d8cc468a8048acb53c5952dbe769d2b2f9cf6e47f7f1",
   hashType: "data1",

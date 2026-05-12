@@ -1,11 +1,11 @@
 import type { LeanOracleDeployment } from "./deployment.js";
 
 /**
- * Logical network discriminator for presets (`testnet.mainnet`).
+ * Logical network discriminator for presets (`testnet`, `mainnet`, `devnet`).
  *
  * @public
  */
-export type LeanOracleNetworkName = "testnet" | "mainnet";
+export type LeanOracleNetworkName = "testnet" | "mainnet" | "devnet";
 
 /**
  * All RPC/Hermes/deployment knobs for one environment.

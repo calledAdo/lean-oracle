@@ -16,7 +16,7 @@ const REPO_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), 
 const ARTIFACTS_DIR = path.join(REPO_ROOT, "deployment", "artifacts");
 
 const DEVNET_RPC = process.env.DEVNET_CKB_RPC_URL ?? "http://127.0.0.1:28114";
-const DEVNET_PRIVATE_KEY = process.env.DEVNET_DEPLOYER_PRIVATE_KEY;
+const DEVNET_PRIVATE_KEY = process.env.DEVNET_PRIVATE_KEY;
 const BTC_FEED_ID =
   process.env.ORACLE_FEED_ID ??
   "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43";
@@ -293,7 +293,7 @@ async function findCurrentOracleCell(client, signerLock, network, feedId) {
 }
 
 async function main() {
-  requireEnv("DEVNET_DEPLOYER_PRIVATE_KEY", DEVNET_PRIVATE_KEY);
+  requireEnv("DEVNET_PRIVATE_KEY", DEVNET_PRIVATE_KEY);
 
   const network = buildDevnetNetwork();
   const client = createCccClient("devnet", DEVNET_RPC, {

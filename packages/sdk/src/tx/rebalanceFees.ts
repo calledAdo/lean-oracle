@@ -44,7 +44,6 @@ export async function collectPlainFuelCellsByLock(
   const limit = options?.limit ?? 10_000;
 
   const out: LeanOracleFuelCellCandidate[] = [];
-  let seen = 0;
 
   for await (const cell of client.findCellsByLock(lock, null, true, "desc", 256)) {
     if (options?.signal?.aborted) {
@@ -52,6 +51,7 @@ export async function collectPlainFuelCellsByLock(
         cause: options.signal.reason,
       });
     }
+    if (out.length >= limit) break;
     if (cell.cellOutput.type) continue;
     if (cell.outputData !== "0x") continue;
 
@@ -59,9 +59,6 @@ export async function collectPlainFuelCellsByLock(
       outPoint: { txHash: cell.outPoint.txHash, index: cell.outPoint.index },
       capacityShannons: cell.cellOutput.capacity,
     });
-
-    seen += 1;
-    if (seen >= limit) break;
   }
 
   out.sort((a, b) => (a.capacityShannons > b.capacityShannons ? -1 : 1));

@@ -3,10 +3,12 @@ export type DeploymentNetwork = "testnet" | "mainnet" | "devnet";
 export type DeploymentAction =
   | "deploy:guardian-set-type"
   | "deploy:oracle-type"
+  | "deploy:owned-type-bind-lock"
   | "deploy:guardian-set"
   | "deploy:oracle"
   | "promote:guardian-set-type"
   | "promote:oracle-type"
+  | "promote:owned-type-bind-lock"
   | "validate:config";
 
 export interface GuardianSetConfig {
@@ -19,6 +21,7 @@ export interface BuildConfig {
   target: string;
   oracleBinaryPath: string;
   guardianSetBinaryPath: string;
+  ownedTypeBindLockBinaryPath: string;
 }
 
 export interface NetworkDeploymentConfig {
@@ -68,7 +71,10 @@ export interface DeploymentArtifactEnvelope {
  * These are intentionally not tied 1:1 to CLI actions; the artifact model
  * supports candidate vs canonical versioning per family.
  */
-export type CodeDeploymentScriptFamily = "guardian-set-type" | "oracle-type";
+export type CodeDeploymentScriptFamily =
+  | "guardian-set-type"
+  | "oracle-type"
+  | "owned-type-bind-lock";
 
 export type CanonicalCodeVersion = number;
 
@@ -79,6 +85,8 @@ export interface CodeDeploymentCandidate {
   codeHash: string;
   hashType: ScriptHashType;
   depType: "code";
+  /** Capacity locked in the deployed code cell, in shannons. */
+  capacity?: bigint;
   txHash?: string;
   index?: number;
 }

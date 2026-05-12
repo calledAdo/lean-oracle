@@ -1,0 +1,20 @@
+{
+  "network": "testnet",
+  "action": "promote:guardian-set-type",
+  "generatedAt": "2026-05-10T17:14:58.101Z",
+  "deployment": {
+    "scriptFamily": "guardian-set-type",
+    "versions": {
+      "1": {
+        "mode": "broadcast",
+        "codeHash": "0x57bddf3d57ea45c88ab68d0de706bbaecd68895fd6062b099626deb157100119",
+        "hashType": "data2",
+        "depType": "code",
+        "txHash": "0x78f83c3967c566c50c783d45c9165af94d23018c5254228b3eb418aa0c5ac37f",
+        "index": 0,
+        "version": 1,
+        "promotedAt": "2026-05-10T17:14:58.100Z"
+      }
+    }
+  }
+}

@@ -20,10 +20,16 @@ function resolveBinaryPath(
   ctx: Pick<DeploymentContext, "config" | "paths">,
 ): string {
   const repoRoot = path.resolve(ctx.paths.deploymentRoot, "..");
-  const rel =
-    scriptFamily === "oracle-type"
-      ? ctx.config.build.oracleBinaryPath
-      : ctx.config.build.guardianSetBinaryPath;
+  const rel = (() => {
+    switch (scriptFamily) {
+      case "oracle-type":
+        return ctx.config.build.oracleBinaryPath;
+      case "guardian-set-type":
+        return ctx.config.build.guardianSetBinaryPath;
+      case "owned-type-bind-lock":
+        return ctx.config.build.ownedTypeBindLockBinaryPath;
+    }
+  })();
   return path.resolve(repoRoot, rel);
 }
 
@@ -47,13 +53,23 @@ export async function deployCodeScript(
   }
 
   const codeHash = ccc.hashCkb(bytes);
+  const codeDataHex = ccc.hexFrom(bytes);
 
   if (dryRun) {
+    const plannedOutput = ccc.CellOutput.from({
+      lock: {
+        codeHash: "0x" + "00".repeat(32),
+        hashType: "data",
+        args: "0x",
+      },
+      capacity: 0,
+    });
     return {
       mode: "dry-run",
       codeHash,
       hashType: "data2",
       depType: "code",
+      capacity: ccc.fixedPointFrom(plannedOutput.occupiedSize + bytes.length),
     };
   }
 
@@ -62,9 +78,13 @@ export async function deployCodeScript(
 
   const { script: lock } = await signer.getRecommendedAddressObj();
 
+  const capacity = ccc.fixedPointFrom(
+    ccc.CellOutput.from({ lock, capacity: 0 }).occupiedSize + bytes.length,
+  );
+
   const tx = ccc.Transaction.from({
-    outputs: [{ lock }],
-    outputsData: [ccc.hexFrom(bytes)],
+    outputs: [{ lock, capacity }],
+    outputsData: [codeDataHex],
   });
 
   await tx.completeInputsByCapacity(signer);
@@ -80,5 +100,6 @@ export async function deployCodeScript(
     depType: "code",
     txHash,
     index: 0,
+    capacity,
   };
 }

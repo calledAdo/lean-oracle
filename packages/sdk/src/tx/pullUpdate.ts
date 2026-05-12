@@ -1,9 +1,15 @@
 import type { Client, ScriptLike, Transaction } from "@ckb-ccc/core";
 import { Script, WitnessArgs, hexFrom } from "@ckb-ccc/core";
 import type { FeedIdHex } from "../types/hex.js";
-import type { HermesBinaryUpdateEnvelope } from "../types/hermes.js";
+import type {
+  HermesBinaryUpdateEnvelope,
+  OracleUpdateOutputSource,
+} from "../types/hermes.js";
 import type { LeanOracleNetworkConfig } from "../types/network.js";
-import { LeanOracleSdkError } from "../errors.js";
+import {
+  LeanOracleSdkError,
+  LeanOracleOracleDataEncodeError,
+} from "../errors.js";
 import { fetchHermesLatestPriceUpdates } from "../hermes/client.js";
 import { decodeLeanOracleCellDataHex } from "../ckb/decodeOracleData.js";
 import { findLatestOracleLiveCellForFeed } from "../ckb/findOracleCells.js";
@@ -12,7 +18,7 @@ import {
   attachGuardianSetCellDep,
 } from "../ckb/guardianDep.js";
 import {
-  buildOracleOutputFromHermesParsed,
+  buildOracleOutputFromHermesUpdate,
   encodeOracleCellDataBytes,
 } from "../ckb/encodeOracleData.js";
 import {
@@ -37,8 +43,22 @@ export interface OraclePullUpdateParams {
    * Optional Hermes response body from a prior `fetchHermesLatestPriceUpdates` call (one envelope per GET).
    *
    * If omitted, the SDK fetches the latest Hermes update for `feedId`.
+   *
+   * Must include the Hermes **`parsed`** field when `outputSource` is
+   * `"hermes-parsed"` (the default): the parsed-mode drafter reads numeric
+   * oracle-cell fields from `parsed`. When `outputSource` is `"binary"`,
+   * `parsed` is not required — the SDK derives the output fields directly
+   * from `binary.data[0]`. In both modes the witness uses `binary.data[0]`,
+   * which is what the on-chain `oracle_script` cryptographically verifies.
    */
   hermesEnvelope?: HermesBinaryUpdateEnvelope;
+
+  /**
+   * Selects how the SDK derives **dynamic price fields** for the new oracle
+   * output cell. Defaults to `"hermes-parsed"` — preserving prior behavior.
+   * See {@link OracleUpdateOutputSource}.
+   */
+  outputSource?: OracleUpdateOutputSource;
 }
 
 export interface OraclePullUpdateResult {
@@ -112,7 +132,23 @@ export async function attachOraclePullUpdate(
   // Decode current oracle config + static fields from the on-chain cell data.
   const inputOracleDecoded = decodeLeanOracleCellDataHex(inputCell.outputData);
 
-  // ── ② Get Hermes envelope (binary + parsed) ──────────────────────────────
+  // ── ② Get Hermes envelope (binary [+ parsed for default mode]) ───────────
+  /*
+   * The on-chain `oracle_script` cryptographically verifies only the **`binary`**
+   * accumulator blob embedded in the witness. The **output cell** fields, by
+   * contrast, can be sourced two ways — see `outputSource`:
+   *
+   *   - "hermes-parsed" (default): cheap; copy from `hermesEnvelope.parsed`.
+   *   - "binary": parse `binary.data[0]` client-side and read fields from the
+   *               decoded price-feed message.
+   *
+   * Both modes feed the same `binary.data[0]` into the witness; the contract
+   * still rejects any tx whose output disagrees with what it extracts from
+   * `binary` on-chain.
+   */
+  const outputSource: OracleUpdateOutputSource =
+    params.outputSource ?? "hermes-parsed";
+
   const hermesEnvelope: HermesBinaryUpdateEnvelope =
     params.hermesEnvelope ??
     (await fetchHermesLatestPriceUpdates(params.network, [params.feedId], {
@@ -123,8 +159,21 @@ export async function attachOraclePullUpdate(
     throw new LeanOracleSdkError("Hermes response missing binary.data[0]");
   }
 
-  // ── ③ Build witness lock bytes (OracleUpdateWitness) ──────────────────────
-  const witnessLockBytes =
+  if (
+    outputSource === "hermes-parsed" &&
+    (!hermesEnvelope.parsed || hermesEnvelope.parsed.length === 0)
+  ) {
+    throw new LeanOracleOracleDataEncodeError(
+      "Hermes response is missing the `parsed` field. " +
+        "The default SDK update drafter (`outputSource: \"hermes-parsed\"`) requires Hermes `parsed` to populate oracle output cell fields. " +
+        "On-chain verification still uses the Hermes `binary` accumulator embedded in the witness. " +
+        "Re-fetch with Hermes `parsed` enabled, supply a `hermesEnvelope` that already includes `parsed`, " +
+        "or pass `outputSource: \"binary\"` to derive output fields from `binary.data[0]` instead.",
+    );
+  }
+
+  // ── ③ Build oracle update witness bytes (OracleUpdateWitness) ─────────────
+  const oracleUpdateWitnessBytes =
     hermesEnvelope.binary.encoding === "hex"
       ? encodeOracleUpdateWitnessFromAccumulatorHex(
           hermesEnvelope.binary.data[0],
@@ -140,34 +189,34 @@ export async function attachOraclePullUpdate(
   attachGuardianSetCellDep(params.tx, guardianDep);
 
   // Attach oracle type-script code dep (required to execute oracle script).
-  params.tx.addCellDeps({
-    outPoint: deployment.oracleTypeScriptCodeDepOutPoint,
-    depType: "code",
-  });
+  params.tx.addCellDeps(deployment.oracleType.codeDep);
 
-  // If the consumed oracle is locked by AlwaysSuccess, also attach its code dep.
+  // If the consumed oracle is locked by the default public lock, also attach its code dep.
   {
-    const publicLock = Script.from(
-      deployment.defaultPublicOracleLockScript as ScriptLike,
-    );
+    const publicLock = Script.from({
+      codeHash: deployment.defaultPublicOracleLock.script.codeHash,
+      hashType: deployment.defaultPublicOracleLock.script.hashType,
+      args: deployment.defaultPublicOracleLock.script.args ?? "0x",
+    });
     if (scriptsEqual(Script.from(inputCell.cellOutput.lock), publicLock)) {
-      params.tx.addCellDeps({
-        outPoint: deployment.alwaysSuccessLockCodeDepOutPoint,
-        depType: "code",
-      });
+      params.tx.addCellDeps(deployment.defaultPublicOracleLock.codeDep);
     }
   }
 
-  // ── ⑤ Create the new oracle output cell data (from Hermes parsed) ─────────
-  const outputOracleDecoded = buildOracleOutputFromHermesParsed(
-    inputOracleDecoded,
+  // ── ⑤ Create the new oracle output cell data ──────────────────────────────
+  // Off-chain only: numeric fields are sourced from `outputSource` (default
+  // `"hermes-parsed"`). The contract re-derives them from `binary` and
+  // rejects this tx if they disagree.
+  const outputOracleDecoded = buildOracleOutputFromHermesUpdate({
+    inputOracle: inputOracleDecoded,
     hermesEnvelope,
-    params.feedId,
-  );
+    feedId: params.feedId,
+    outputSource,
+  });
   const outputOracleDataBytes = encodeOracleCellDataBytes(outputOracleDecoded);
   const outputOracleDataHex = hexFrom(outputOracleDataBytes);
 
-  // ── ⑥ Mutate tx: add input, add output, set witness lock ─────────────────
+  // ── ⑥ Mutate tx: add input, add output, set oracle update witness ───────
   /**
    * CCC `addInput` returns the **new inputs length**, not the index.
    * The added input’s index is therefore `len - 1`.
@@ -191,11 +240,13 @@ export async function attachOraclePullUpdate(
   /*
    * CCC’s `addInput` returns the **input index**. The on-chain oracle script reads the
    * witness at that same index (group-input 0 for the oracle script group), so we must
-   * write `WitnessArgs.lock` at `inputIndex` — not `inputIndex - 1`.
+   * write `WitnessArgs.input_type` at `inputIndex`.
+   *
+   * The `lock` field is reserved for lock-script-owned witness material.
    */
   const witnessArgs =
     params.tx.getWitnessArgsAt(inputIndex) ?? WitnessArgs.from({});
-  witnessArgs.lock = hexFrom(witnessLockBytes);
+  witnessArgs.inputType = hexFrom(oracleUpdateWitnessBytes);
   params.tx.setWitnessArgsAt(inputIndex, witnessArgs);
 
   return { mutated: params.tx };

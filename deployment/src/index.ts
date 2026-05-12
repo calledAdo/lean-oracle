@@ -20,7 +20,11 @@ if (ctx.action === "validate:config") {
   // No side effects for validate:config.
 } else {
 // Only code-deployment actions need a contract build phase.
-  if (ctx.action === "deploy:guardian-set-type" || ctx.action === "deploy:oracle-type") {
+  if (
+    ctx.action === "deploy:guardian-set-type" ||
+    ctx.action === "deploy:oracle-type" ||
+    ctx.action === "deploy:owned-type-bind-lock"
+  ) {
     await buildContracts(ctx);
   }
   const result = await runDeploymentAction(ctx);

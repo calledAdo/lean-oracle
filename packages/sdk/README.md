@@ -2,34 +2,402 @@
 
 TypeScript SDK for the [Lean Oracle](../../crates/lean_oracle/README.md) on
 CKB. The package is intended to be the primary off-chain entry point for
-applications that want to read or update the oracle on either CKB testnet or
-CKB mainnet.
+applications that want to read or update the oracle on CKB testnet.
+
+Mainnet is not live yet. The first npm release is testnet-first; use
+`LeanOracleTestnetClient` or pass an explicit `LeanOracleNetworkConfig`.
+`LeanOracleMainnetClient` is exported for API continuity, but its deployment
+values remain intentionally inert until a mainnet deployment is published.
 
 ## Status
 
-This package is currently a scaffold. It exposes empty barrels for:
+This package already contains the core TypeScript surfaces for:
 
-- `networks/testnet` and `networks/mainnet` — network configuration presets
-- `client` — the consumer-facing client surface
+- **Hermes** — price-update fetching and response parsing helpers
+- **CKB Codecs** — on-chain oracle and guardian-set data encode-decode helpers
+- **Discovery** — oracle cell discovery and input resolution
+- **Transactions** — transaction drafting for read and update flows
+- **Rebalancing** — fee rebalancing helpers for complex oracle updates
+- **Presets** — pre-configured network and client surfaces; testnet is live first, mainnet is intentionally inert until deployment
 
-Real client logic and the final published package name will be added in
-follow-up work.
+The package is substantive and functional, though it continues to evolve
+alongside the on-chain scripts.
+
+## Install
+
+```bash
+npm install lean-oracle-sdk @ckb-ccc/core
+```
+
+The SDK is ESM-only and requires Node.js 18 or newer. Browser and worker
+runtimes are supported for read/Hermes helpers when they provide `fetch`.
+
+## Quick Start
+
+Read the latest deployed testnet oracle state for a Pyth feed:
+
+```ts
+import { LeanOracleTestnetClient } from "lean-oracle-sdk";
+
+const feedId =
+  "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43";
+
+const oracle = new LeanOracleTestnetClient();
+const state = await oracle.getOracleCellState({ feedId });
+
+if (!state) {
+  throw new Error(`No oracle cell found for ${feedId}`);
+}
+
+console.log({
+  outPoint: state.outPoint,
+  price: state.data.price,
+  expo: state.data.expo,
+  publishTimeUnix: state.data.publishTimeUnix,
+});
+```
+
+Draft an update transaction. The returned transaction is structurally ready for
+the oracle update path but still needs normal fee inputs/change and signing:
+
+```ts
+import { LeanOracleTestnetClient } from "lean-oracle-sdk";
+import { rebalanceFuel } from "lean-oracle-sdk/fuel";
+
+const oracle = new LeanOracleTestnetClient({ cccClient });
+
+const tx = await oracle.draftOracleUpdateTx({ feedId });
+const rebalance = await rebalanceFuel(tx, {
+  cccClient,
+  lockScript: signerLockScript,
+  fuelLimit: 32,
+});
+
+if (rebalance.status !== "ok") {
+  throw new Error(
+    `Not enough CKB capacity for fees; need ${rebalance.extraCapacityNeededShannons}`,
+  );
+}
+
+const txHash = await signer.sendTransaction(rebalance.mutated);
+```
+
+## Finding Pyth Feed IDs
+
+Oracle cells are keyed by a 32-byte Pyth price feed id. You can look up feed ids
+from Pyth's public catalog or through the SDK's Hermes catalog helper.
+
+For example, to find BTC/USD, pass the display symbol `"BTC/USD"`:
+
+```ts
+import {
+  findPythFeedIdBySymbol,
+} from "lean-oracle-sdk/hermes";
+import { leanOracleTestnetPreset } from "lean-oracle-sdk/presets";
+
+const btc = await findPythFeedIdBySymbol(
+  leanOracleTestnetPreset,
+  "BTC/USD",
+  { assetType: "crypto" },
+);
+
+if (!btc) {
+  throw new Error("BTC/USD feed not found in Pyth catalog");
+}
+
+console.log(btc.id);
+```
+
+`findPythFeedIdBySymbol` performs an exact, case-insensitive match against
+Pyth's full catalog symbol (`"Crypto.BTC/USD"`) and display symbol
+(`"BTC/USD"`). Plain `"BTC"` is intentionally not enough: the catalog contains
+many BTC-related feeds such as `WBTC/USD`, `TBTC/USD`, and `CBBTC/USD`.
+
+Use `fetchPythFeedCatalog` from `lean-oracle-sdk/hermes` when you want to build
+a search UI or list multiple feeds. You can also browse Pyth's published feed
+list at <https://www.pyth.network/developers/price-feed-ids>.
 
 ## Layout
 
+- `client/` — primary consumer-facing client surface (`LeanOracleClient`)
+- `hermes/` — Pyth/Hermes fetch and parsing helpers
+- `ckb/` — manual byte codecs for oracle and guardian-set cells (guardian-set
+  cell data: 12-byte LE header `set_index`, `quorum`, `guardian_count`, then
+  `guardian_count` × 20-byte addresses; no lifecycle timestamps)
+- `tx/` — transaction pipelines and building workflows
+- `presets/` — network configuration presets, CCC lock preset wiring, and
+  oracle-type code-version helpers
+- `witness/` — oracle update witness encoding
+- `types/` — shared TypeScript definitions
+- `internal/` — internal helpers and stubs
+
+## Imports
+
+The package root is the **stable, consumer-facing API**: client classes,
+network presets, public errors and core (non-transport) types, basic
+decode helpers, and oracle-cell discovery.
+
+```ts
+import {
+  LeanOracleTestnetClient,
+  decodeLeanOracleCellDataHex,
+  decodeGuardianSetCellDataHex,
+} from "lean-oracle-sdk";
 ```
-src/
-├── index.ts          # public barrel
-├── networks/
-│   ├── index.ts
-│   ├── testnet.ts    # CKB testnet preset (placeholder)
-│   └── mainnet.ts    # CKB mainnet preset (placeholder)
-└── client/
-    └── index.ts      # LeanOracleClient placeholder
+
+Hermes fetch helpers and Hermes-specific types live under the dedicated
+`/hermes` subpath:
+
+```ts
+import {
+  fetchHermesLatestPriceUpdates,
+  buildHermesSseStreamUrl,
+} from "lean-oracle-sdk/hermes";
+
+import type {
+  HermesBinaryUpdateEnvelope,
+  OracleUpdateOutputSource,
+} from "lean-oracle-sdk/hermes";
 ```
+
+Lower-level helpers (witness encoders, transaction-mutation primitives,
+fee/fuel rebalancing, guardian-dep resolution, output construction) are
+**explicit subpath imports**:
+
+```ts
+// Low-level tx mutation primitives
+import { attachOraclePullUpdate }
+  from "lean-oracle-sdk/tx";
+
+// Fee / fuel / capacity primitives
+import {
+  rebalanceTransactionFeeAfterOracleMutation,
+  collectPlainFuelCellsByLock,
+} from "lean-oracle-sdk/fuel";
+
+// Off-chain oracle output construction, witness encoders, and other
+// advanced helpers
+import {
+  buildOracleOutputFromHermesParsed,
+  encodeOracleUpdateWitnessFromAccumulatorHex,
+} from "lean-oracle-sdk/advanced";
+```
+
+Available subpaths: `./ckb`, `./tx`, `./fuel`, `./hermes`, `./presets`,
+`./advanced`.
+
+### Reading the latest oracle state
+
+Use `getOracleCellState` to locate and decode the latest live oracle cell for a
+feed in one call. Returns `undefined` when no matching cell exists.
+
+```ts
+import { LeanOracleTestnetClient } from "lean-oracle-sdk";
+
+const client = new LeanOracleTestnetClient();
+const current = await client.getOracleCellState({ feedId });
+if (current) {
+  console.log(current.data.price, current.data.publishTimeUnix);
+}
+```
+
+### Update output source: `parsed` vs `binary`
+
+When drafting an oracle update, the SDK needs to populate the **dynamic price
+fields** (price/conf/expo/publish_time/...) of the new output cell. Two modes
+are supported via `outputSource`:
+
+```ts
+// Default — copy fields from Hermes `parsed`. Cheap and fast.
+await client.draftOracleUpdateTx({ feedId });
+
+// Opt-in — parse `binary.data[0]` client-side and use those fields.
+// Useful for binary-only envelopes or to surface format mismatches before
+// a transaction is ever submitted.
+await client.draftOracleUpdateTx({ feedId, outputSource: "binary" });
+```
+
+In **both** modes the witness carries the same `binary.data[0]`, and the
+on-chain `oracle_script` cryptographically verifies it. `outputSource` only
+changes where the *output cell* fields come from off-chain. Default behavior
+is `"hermes-parsed"` and is unchanged from prior releases.
+
+### Custom CCC client
+
+`LeanOracleClient`, `LeanOracleTestnetClient`, and `LeanOracleMainnetClient`
+all accept an optional preconfigured CCC `Client`. When omitted, the SDK
+constructs a public client (`ClientPublicMainnet` / `ClientPublicTestnet`)
+from the network's JSON-RPC URL. Pass `cccClient` when you need to share a
+single CCC instance across services, point at an authenticated/private CKB
+endpoint, or inject a test fake.
+
+```ts
+import { LeanOracleTestnetClient } from "lean-oracle-sdk";
+import { ClientPublicTestnet } from "@ckb-ccc/core";
+
+const cccClient = new ClientPublicTestnet({ url: process.env.CKB_RPC_URL });
+const oracle = new LeanOracleTestnetClient({ cccClient });
+```
+
+> **Stability:** while the package is pre-release (`0.1.x`), advanced/subpath
+> exports may change shape more frequently than the curated root surface.
+> Prefer root imports when possible; reach for subpaths when you need
+> transaction-author-level control.
+
+### Code upgrades and cell versions
+
+CKB type scripts are immutable per cell: the `type.codeHash` of an oracle
+cell is fixed when the cell is created. If the canonical `oracleType` code is
+ever upgraded — a new `oracle_type` binary, hence a new `codeHash` — then
+cells that were created under the **old** `codeHash` are not reachable via the
+default preset, because discovery queries the indexer filtered by the latest
+`codeHash`.
+
+The bundled presets carry their full code-version history under
+`deployment.oracleTypeVersions` (a map keyed by version number, mirroring
+`deployment/artifacts/<network>.oracle-type.json#versions`). The latest entry
+equals `deployment.oracleType`, which is what discovery, update, deploy, and
+burn use by default — this map does **not** change default behaviour. To
+operate on a cell created under a prior code version, build a config pinned to
+that version with `leanOraclePresetForOracleVersion`:
+
+```ts
+import {
+  leanOracleTestnetPreset,
+  leanOraclePresetForOracleVersion,
+} from "lean-oracle-sdk/presets";
+import { LeanOracleClient } from "lean-oracle-sdk";
+
+// Operate on cells created under oracle_type v1.
+const oracle = new LeanOracleClient({
+  network: leanOraclePresetForOracleVersion(leanOracleTestnetPreset, 1),
+});
+```
+
+`leanOracleLatestOracleVersion(config)` returns the highest version key in the
+history (or `undefined` for an inert preset like mainnet before launch).
+`leanOraclePresetForOracleVersion` throws a `LeanOracleSdkError` if the config
+has no version history or the requested version is absent.
+
+Upgrades to the `oracle_type` script are expected to be rare — guardian-set
+rotation happens in place via `set_index`, with no `codeHash` change — so this
+only matters when a contract fix forces a redeploy and you still hold cells
+from the prior version.
 
 ## Scripts
 
 - `npm run build` — type-check and emit to `dist/`
 - `npm run clean` — remove `dist/`
-- `npm run prepublishOnly` — clean + build before `npm publish`
+- `npm run test` — build, then run SDK fixture checks for codecs, discovery, client behavior, transaction builders, fee balancing, package boundaries, and accumulator parsing
+- `npm run test:pack` — pack the SDK, install it into a temporary consumer project, and import every advertised subpath
+- `npm run release:check` — `npm test && npm run test:pack`
+- `npm run prepublishOnly` — clean, then run the release check before `npm publish`
+- `npm run test:integration:devnet` — run the repository's opt-in integration tests against an already-deployed local devnet
+
+## Devnet Integration Tests
+
+This repository has an opt-in integration suite for local devnet:
+
+```bash
+cd packages/sdk
+npm run test:integration:devnet
+```
+
+The published SDK is isolated from this repository's deployment tooling. For a
+local devnet, create your own CCC client and provide a complete
+`LeanOracleNetworkConfig` whose `deployment` values come from your own local
+deployment process. Do not use the testnet preset for devnet cells; the preset
+contains the public testnet deployment constants.
+
+### Environment
+
+- `DEVNET_CKB_RPC_URL` defaults to `http://127.0.0.1:28114`.
+- `HERMES_BASE_URL` defaults to `https://hermes.pyth.network`.
+- `ORACLE_FEED_ID` defaults to the BTC feed used by the integration tests.
+- `DEVNET_PRIVATE_KEY` is the private key used by signer-required tests
+  to derive a secp256k1 lock, collect plain fuel cells, sign transactions, and
+  optionally broadcast mutations.
+- `DEVNET_BROADCAST_UPDATES=true` enables mutating tests that submit update,
+  deploy, and burn transactions. Leave unset to avoid changing chain state.
+
+Example:
+
+```bash
+cd packages/sdk
+DEVNET_CKB_RPC_URL=http://127.0.0.1:28114 \
+DEVNET_PRIVATE_KEY=0x... \
+DEVNET_BROADCAST_UPDATES=true \
+npm run test:integration:devnet
+```
+
+Missing signer env skips signer-required tests. An unreachable devnet RPC fails
+the suite because the command explicitly targets a local devnet deployment.
+
+### Creating a Devnet Client in Your Own Script
+
+Published testnet/mainnet presets are available from `lean-oracle-sdk`, but
+local devnets should use the base `LeanOracleClient`. Build a
+`LeanOracleNetworkConfig` from your own local deployment metadata, create the
+CCC client yourself, then pass both into the SDK:
+
+```ts
+import { ccc } from "@ckb-ccc/core";
+import { LeanOracleClient } from "lean-oracle-sdk";
+
+const rpcUrl = process.env.DEVNET_CKB_RPC_URL ?? "http://127.0.0.1:28114";
+
+const network = {
+  name: "devnet",
+  ckbJsonRpcUrl: rpcUrl,
+  hermesBaseUrl: process.env.HERMES_BASE_URL ?? "https://hermes.pyth.network",
+  deployment: {
+    // The lock used by your local oracle cell when callers do not pass
+    // `oracleLockScript` explicitly. This may be AlwaysSuccess, an
+    // owned-type-bind-lock instance, or another lock from your devnet setup.
+    defaultPublicOracleLock: {
+      script: {
+        codeHash: "0x...",
+        hashType: "type",
+        args: "0x...",
+      },
+      codeDep: {
+        outPoint: { txHash: "0x...", index: 0n },
+        depType: "code",
+      },
+    },
+    oracleType: {
+      codeHash: "0x...",
+      hashType: "type",
+      codeDep: {
+        outPoint: { txHash: "0x...", index: 0n },
+        depType: "code",
+      },
+    },
+    guardianSetType: {
+      codeHash: "0x...",
+      hashType: "type",
+      args: "0x...",
+      codeDep: {
+        outPoint: { txHash: "0x...", index: 0n },
+        depType: "code",
+      },
+    },
+    pythEmitter: {
+      chain: 26,
+      address: "0xe101faedac5851e32b9b23b5f9411a8c2bac4aae3ed4dd7b811dd1a72ea4aa71",
+    },
+  },
+};
+
+const cccClient = new ccc.ClientJsonRpc(rpcUrl);
+const oracle = new LeanOracleClient({ network, cccClient });
+```
+
+If your oracle cells are locked by a script other than
+`network.deployment.defaultPublicOracleLock.script`, pass that lock on each
+operation:
+
+```ts
+await oracle.getOracleCellState({ feedId, oracleLockScript });
+await oracle.draftOracleUpdateTx({ feedId, oracleLockScript });
+```

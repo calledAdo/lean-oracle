@@ -6,7 +6,12 @@
  *
  * This module wraps the **v2** HTTP endpoints that return:
  * - `binary` — wire-format payloads (typically **hex** — hex-decode before passing into witness-encoding helpers).
- * - `parsed` — human-readable parity fields (nice for UX; **on-chain proofs use `binary`** only).
+ * - `parsed` — human-readable parity fields. **On-chain proofs use `binary`** only;
+ *   `parsed` is an off-chain projection. By default the TS update drafter reads
+ *   output cell fields from `parsed` (`outputSource: "hermes-parsed"`), so callers
+ *   using the default mode must keep `parsed` enabled. Callers can opt into
+ *   `outputSource: "binary"` to derive those fields from `binary.data[0]`
+ *   client-side and skip the `parsed` requirement entirely.
  *
  * All network I/O uses the platform **`fetch`** (Node 18+, modern browsers, workers).
  */
@@ -217,14 +222,34 @@ async function fetchHermesJsonEnvelope(
   }
 
   /** Perform the outbound GET (Hermes endpoints are anonymous read-only pulls). */
-  const response = await doFetch(url, {
-    method: "GET",
-    headers: {
-      /** Some intermediaries behave better when `Accept` is explicit. */
-      Accept: "application/json",
-    },
-    signal,
-  });
+  let response: Response;
+  try {
+    response = await doFetch(url, {
+      method: "GET",
+      headers: {
+        /** Some intermediaries behave better when `Accept` is explicit. */
+        Accept: "application/json",
+      },
+      signal,
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    const cause =
+      err instanceof Error
+        ? (err as Error & { cause?: unknown }).cause
+        : undefined;
+    const causeMessage =
+      cause instanceof Error ? cause.message : cause ? String(cause) : "";
+    throw new LeanOracleHermesError(
+      `Hermes request failed before receiving a response for ${url.toString()}: ${message}`,
+      {
+        status: 0,
+        url: url.toString(),
+        responseBodySnippet: causeMessage || message,
+        cause: err,
+      },
+    );
+  }
 
   const bodyText = await response.text();
   /** Never ship multi-kilo bodies verbatim into exceptions / logs — clip defensively. */
@@ -278,8 +303,12 @@ const DEFAULT_ERROR_SNIPPET_LEN = 2048;
  *   `HermesBinaryUpdateEnvelope`; `parsed?.length` can therefore exceed `#feedIds`.
  * - **Concurrency** — multiple independent oracle deployments can coexist on CKB — Hermes remains
  *   feed-keyed (`ids[]`).
- * - **On-chain fidelity** — only `binary` bytes should be echoed into **`OracleUpdateWitness`**;
- *   `parsed` is **UX sugar**.
+ * - **On-chain fidelity** — only `binary` bytes are cryptographically verified by the
+ *   on-chain `oracle_script` (echoed into **`OracleUpdateWitness`**). `parsed` is
+ *   **not** an on-chain authority. The default TS update drafter reads output cell
+ *   fields from `parsed` for ergonomics; callers can opt into `outputSource: "binary"`
+ *   to use the SDK's narrow PNAU parser instead. The narrow parser does not verify
+ *   the embedded VAA signatures or Merkle proofs — those checks remain on-chain.
  *
  * @see https://docs.pyth.network/price-feeds/how-pyth-works/hermes
  *

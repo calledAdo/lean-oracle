@@ -50,3 +50,23 @@ export interface HermesParsedPriceTouch {
     prev_publish_time: number;
   };
 }
+
+/**
+ * Source from which the SDK draws **dynamic price fields** when building the
+ * new oracle output cell during update drafting.
+ *
+ * - `"hermes-parsed"` *(default)* — read fields from `hermesEnvelope.parsed`.
+ *   Cheap and fast; no off-chain accumulator parsing. The contract still
+ *   verifies the embedded `binary` accumulator on-chain and rejects any tx
+ *   whose output disagrees.
+ * - `"binary"` — parse `hermesEnvelope.binary.data[0]` client-side and read
+ *   fields from the decoded price-feed message. Useful for binary-only
+ *   envelopes or to surface format-mismatch errors before a transaction is
+ *   ever submitted. The on-chain verification path is unchanged.
+ *
+ * Both modes use the **same** `binary.data[0]` bytes for the witness; the
+ * option only changes where the *output cell* fields come from.
+ *
+ * @public
+ */
+export type OracleUpdateOutputSource = "hermes-parsed" | "binary";

@@ -1,0 +1,49 @@
+{
+  "network": "testnet",
+  "action": "deploy:oracle",
+  "generatedAt": "2026-05-11T14:13:32.195Z",
+  "deployment": {
+    "kind": "deploy:oracle",
+    "mode": "broadcast",
+    "network": "testnet",
+    "oracleType": {
+      "version": 2,
+      "codeHash": "0x10c9bcc3af00fc3728cb95d5e14ec882716af5f531a010852526ce784f6958ec",
+      "hashType": "data2",
+      "depType": "code",
+      "outPoint": {
+        "txHash": "0x45f033f0944b50be1e5b80f733c321648ddcfdbe0c183477cf0b77bd0f8312b5",
+        "index": 0
+      }
+    },
+    "ownedTypeBindLock": {
+      "version": 1,
+      "codeHash": "0x5554bc20c9f3dbb8d1d7a6591b1b2ceeb0bbee822804635ee168911a440a111c",
+      "hashType": "data2",
+      "depType": "code",
+      "outPoint": {
+        "txHash": "0x982a5d5555ebc855a97d9e71a8ac9de9cefc25a62a44ccfc2b6605758c01ba9f",
+        "index": 0
+      },
+      "ownerLockHash": "0x7de82d61a7eb2ec82b0dc653e558ba120efcbfbb44dac87c12972d05bf250653"
+    },
+    "guardianSet": {
+      "outPoint": {
+        "txHash": "0xd7f2f0511490fd3151d1d069fe10a2945fa36417b72d23590aa787196d4f6477",
+        "index": 0,
+        "typeIdArgs": "0x3e62200a42204a48f974b7d6cc9dce4f8b9a009baf2d848ec316c156feedf1a5",
+        "capacity": "52600000000"
+      },
+      "guardianSetTypeHash": "0x37da40f642f3eec1f6c6720de58e2cc6a5013660bd43c3c74ed67b127e955a97"
+    },
+    "oracleConfig": {
+      "feedId": "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",
+      "emitterChain": 26,
+      "emitterAddress": "0xe101faedac5851e32b9b23b5f9411a8c2bac4aae3ed4dd7b811dd1a72ea4aa71"
+    },
+    "deployed": {
+      "txHash": "0xa7c34e9d9604685548c1bfdc7a0b9e617fc95c1ddb15112fee3dd127f96f563b",
+      "index": 0
+    }
+  }
+}

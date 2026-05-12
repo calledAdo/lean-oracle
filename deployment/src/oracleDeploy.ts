@@ -42,21 +42,40 @@ function selectLatestCanonicalVersion(
   return record;
 }
 
-function loadOracleTypeVersion(params: {
+function loadCodeVersion(params: {
   deploymentRoot: string;
   network: DeploymentNetwork;
+  scriptFamily: "oracle-type" | "owned-type-bind-lock";
 }): CodeDeploymentVersionRecord {
   const env = readCodeDeploymentArtifact({
     deploymentRoot: params.deploymentRoot,
     network: params.network,
-    scriptFamily: "oracle-type",
+    scriptFamily: params.scriptFamily,
   });
   const deployment = env?.deployment;
   if (!deployment || typeof deployment !== "object") {
-    throw new Error(`Missing oracle-type code deployment artifact for ${params.network}`);
+    throw new Error(
+      `Missing ${params.scriptFamily} code deployment artifact for ${params.network}`,
+    );
   }
   const artifact = deployment as CodeDeploymentArtifact;
-  return selectLatestCanonicalVersion(artifact.versions as Record<number, CodeDeploymentVersionRecord>);
+  return selectLatestCanonicalVersion(
+    artifact.versions as Record<number, CodeDeploymentVersionRecord>,
+  );
+}
+
+function loadOracleTypeVersion(params: {
+  deploymentRoot: string;
+  network: DeploymentNetwork;
+}): CodeDeploymentVersionRecord {
+  return loadCodeVersion({ ...params, scriptFamily: "oracle-type" });
+}
+
+function loadBindLockVersion(params: {
+  deploymentRoot: string;
+  network: DeploymentNetwork;
+}): CodeDeploymentVersionRecord {
+  return loadCodeVersion({ ...params, scriptFamily: "owned-type-bind-lock" });
 }
 
 type GuardianSetStateArtifact = {
@@ -129,6 +148,31 @@ export async function deployOracleStateCell(params: {
     );
   }
 
+  const bindLockVersion = loadBindLockVersion({
+    deploymentRoot: ctx.paths.deploymentRoot,
+    network: ctx.network,
+  });
+  const bindLockHashType = (bindLockVersion as unknown as { hashType?: ScriptHashType }).hashType;
+  if (!bindLockHashType) {
+    throw new Error(
+      "Selected owned-type-bind-lock canonical version is missing hashType",
+    );
+  }
+
+  // Compute the deployer's lock hash off the signer's recommended address. The
+  // bind lock embeds this as `args` so the deployer can later burn (or
+  // otherwise consume without continuity) any cell deployed by this run.
+  const client = createCccClient(ctx.network, ctx.env.rpcUrl, ctx.env);
+  const signer = createPrivateKeySigner(client, ctx.env.deployerPrivateKey);
+  const { script: deployerLock } = await signer.getRecommendedAddressObj();
+  const deployerLockHash = ccc.hashCkb(deployerLock.toBytes());
+
+  const oracleCellLock = ccc.Script.from({
+    codeHash: bindLockVersion.codeHash,
+    hashType: bindLockHashType,
+    args: deployerLockHash,
+  });
+
   const guardianSetState = loadGuardianSetStateArtifact({
     deploymentRoot: ctx.paths.deploymentRoot,
     network: ctx.network,
@@ -173,6 +217,13 @@ export async function deployOracleStateCell(params: {
         hashType: oracleHashType,
         depType: oracleTypeVersion.depType,
       },
+      ownedTypeBindLock: {
+        version: bindLockVersion.version,
+        codeHash: bindLockVersion.codeHash,
+        hashType: bindLockHashType,
+        depType: bindLockVersion.depType,
+        ownerLockHash: deployerLockHash,
+      },
       guardianSet: {
         outPoint: guardianSetState.deployed ?? null,
         guardianSetTypeHash: guardianSetTypeHashHex,
@@ -193,10 +244,11 @@ export async function deployOracleStateCell(params: {
       "Selected oracle-type canonical version is missing txHash/index; cannot deploy oracle state cell",
     );
   }
-
-  const client = createCccClient(ctx.network, ctx.env.rpcUrl, ctx.env);
-  const signer = createPrivateKeySigner(client, ctx.env.deployerPrivateKey);
-  const { script: lock } = await signer.getRecommendedAddressObj();
+  if (!bindLockVersion.txHash || bindLockVersion.index === undefined) {
+    throw new Error(
+      "Selected owned-type-bind-lock canonical version is missing txHash/index; cannot deploy oracle state cell",
+    );
+  }
 
   const guardianSetDeployed = guardianSetState.deployed;
   if (!guardianSetDeployed) {
@@ -214,7 +266,10 @@ export async function deployOracleStateCell(params: {
   const tx = ccc.Transaction.from({
     outputs: [
       {
-        lock,
+        // Public oracle cells use `OwnedTypeBindLock`: anyone may consume the
+        // cell as long as the (lock, type) identity continues into the
+        // outputs; only the deployer (owner) may burn it.
+        lock: oracleCellLock,
         type: oracleTypeScript,
         // Let CCC compute the minimum occupied capacity from (cell output + data).
         // This avoids hardcoding a capacity that becomes insufficient as scripts/data evolve.
@@ -225,6 +280,10 @@ export async function deployOracleStateCell(params: {
     cellDeps: [
       {
         outPoint: { txHash: oracleTypeVersion.txHash, index: BigInt(oracleTypeVersion.index) },
+        depType: "code" as const,
+      },
+      {
+        outPoint: { txHash: bindLockVersion.txHash, index: BigInt(bindLockVersion.index) },
         depType: "code" as const,
       },
       {
@@ -252,6 +311,14 @@ export async function deployOracleStateCell(params: {
       hashType: oracleHashType,
       depType: oracleTypeVersion.depType,
       outPoint: { txHash: oracleTypeVersion.txHash, index: oracleTypeVersion.index },
+    },
+    ownedTypeBindLock: {
+      version: bindLockVersion.version,
+      codeHash: bindLockVersion.codeHash,
+      hashType: bindLockHashType,
+      depType: bindLockVersion.depType,
+      outPoint: { txHash: bindLockVersion.txHash, index: bindLockVersion.index },
+      ownerLockHash: deployerLockHash,
     },
     guardianSet: {
       outPoint: guardianSetState.deployed,

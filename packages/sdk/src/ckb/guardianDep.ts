@@ -7,6 +7,7 @@ import {
   LeanOracleGuardianSetResolveError,
   LeanOracleSdkError,
 } from "../errors.js";
+import { normalizeHex32 as normalizeHex32Internal } from "../internal/hex.js";
 
 export interface ResolveGuardianSetCellDepOptions {
   /** Required `guardian_set_type_hash` from candidate oracle cell data (`OracleData`). */
@@ -24,18 +25,14 @@ export interface ResolveGuardianSetCellDepOptions {
  */
 export const DEFAULT_GUARDIAN_SET_DEP_TYPE: DepTypeLike = "code";
 
-/** Default max page size when scanning guardian cells by type. */
-const DEFAULT_GUARDIAN_FIND_PAGE_LIMIT = 256;
-
 function normalizeHex32(label: string, hex: HexString): HexString {
-  const trimmed = hex.trim().toLowerCase();
-  const body = trimmed.startsWith("0x") ? trimmed.slice(2) : trimmed;
-  if (!/^[0-9a-f]{64}$/.test(body)) {
+  try {
+    return normalizeHex32Internal(hex);
+  } catch (e) {
     throw new LeanOracleSdkError(
-      `${label}: expected 32-byte hex (0x + 64 nibbles), got "${hex}"`,
+      `${label}: ${(e as Error).message}`,
     );
   }
-  return `0x${body}`;
 }
 
 function cellToOutPoint(cell: Cell): LeanOracleCellOutPoint {
@@ -108,24 +105,15 @@ function typeHashOfCellOrThrow(cell: Cell): HexString {
   return hashCkb(type.toBytes());
 }
 
-async function collectPagedCells(
-  cellStream: AsyncIterable<Cell>,
-  signal?: AbortSignal,
-): Promise<Cell[]> {
-  const cells: Cell[] = [];
-  for await (const cell of cellStream) {
-    if (signal?.aborted) {
-      throw new LeanOracleSdkError("Guardian-set lookup aborted", {
-        cause: signal.reason,
-      });
-    }
-    cells.push(cell);
-  }
-  return cells;
-}
-
 /**
  * Resolve guardian-set **`CellDep`** outpoint usable across concurrent oracle txs.
+ *
+ * This function scans live cells by the guardian-set type script identity defined
+ * in the `deployment` and matches them against the `expectedGuardianSetTypeHash`.
+ *
+ * The oracle update path requires exactly one matching guardian-set cell dependency.
+ * If zero or more than one matching cell is found, resolution fails to prevent
+ * transaction ambiguity.
  *
  * @public
  */
@@ -134,9 +122,10 @@ export async function resolveGuardianSetCellDepOutPoint(
   deployment: LeanOracleDeployment,
   options?: ResolveGuardianSetCellDepOptions,
 ): Promise<LeanOracleCellOutPoint> {
-  if (options?.signal?.aborted) {
+  const signal = options?.signal;
+  if (signal?.aborted) {
     throw new LeanOracleSdkError("Guardian-set lookup aborted", {
-      cause: options.signal.reason,
+      cause: signal.reason,
     });
   }
 
@@ -151,39 +140,55 @@ export async function resolveGuardianSetCellDepOutPoint(
   );
 
   // ── Discovery via indexer by guardian type script identity ────────────────
-  const guardianCodeHash = deployment.guardianSetTypeScriptCodeHash;
-
+  const identity = deployment.guardianSetType;
   const guardianTypeScript = Script.from({
-    codeHash: guardianCodeHash,
-    hashType: deployment.guardianSetTypeScriptHashType,
-    args: deployment.guardianSetTypeScriptArgs,
+    codeHash: identity.codeHash,
+    hashType: identity.hashType,
+    args: identity.args,
   });
 
-  const pageLimit = DEFAULT_GUARDIAN_FIND_PAGE_LIMIT;
-  const candidates = await collectPagedCells(
-    cccClient.findCellsByType(guardianTypeScript, true, "desc", pageLimit),
-    options?.signal,
-  );
+  let matched: Cell | undefined;
 
-  const matches = candidates.filter((cell) => {
-    try {
-      return normalizeHex32("guardian-set type hash", typeHashOfCellOrThrow(cell)) === expected;
-    } catch {
-      return false;
+  /*
+   * We iterate over live cells matching the guardian-set type script.
+   * To mirror the contract's strictness, we require a unique match.
+   */
+  for await (const cell of cccClient.findCellsByType(
+    guardianTypeScript,
+    true,
+  )) {
+    if (signal?.aborted) {
+      throw new LeanOracleSdkError("Guardian-set lookup aborted", {
+        cause: signal.reason,
+      });
     }
-  });
 
-  if (matches.length === 0) {
+    let isMatch = false;
+    try {
+      isMatch =
+        normalizeHex32("guardian-set type hash", typeHashOfCellOrThrow(cell)) ===
+        expected;
+    } catch {
+      // Skip cells with malformed or missing type scripts during resolution.
+      isMatch = false;
+    }
+
+    if (!isMatch) continue;
+
+    if (matched) {
+      throw new LeanOracleGuardianSetResolveError(
+        `Ambiguous guardian-set resolution: more than one live cell matches expected type hash ${expected}. The contract requires exactly one authoritative trust root.`,
+      );
+    }
+
+    matched = cell;
+  }
+
+  if (!matched) {
     throw new LeanOracleGuardianSetResolveError(
       `No live guardian-set cell found for expected type hash ${expected}`,
     );
   }
-  /*
-   * For now we accept the first match (descending RPC order) rather than failing on ambiguity.
-   * The on-chain script will still reject **transactions** that include >1 matching dep, but
-   * here we are only returning a single OutPoint to be attached as the unique dep.
-   *
-   * Later we can refine selection (e.g. highest `set_index`, non-expired, newest outpoint).
-   */
-  return cellToOutPoint(matches[0]!);
+
+  return cellToOutPoint(matched);
 }
