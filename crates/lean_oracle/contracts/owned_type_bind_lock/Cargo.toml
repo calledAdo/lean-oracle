@@ -1,0 +1,29 @@
+# `owned_type_bind_lock` is a permissionless-update CKB lock script.
+#
+# It enforces two paths:
+# 1. Owner-escape: any tx that includes an input cell whose lock hash equals
+#    the lock's `args` (32-byte owner lock hash) is accepted unconditionally.
+#    Authorization is delegated to the owner's lock script — including this
+#    cell in the inputs requires the owner's signature on that input.
+# 2. Continuity-bind: when the owner is not present, the lock requires
+#    group-input count == group-output count, and every group-input type hash
+#    must appear in the group outputs. This makes the cell consumable by
+#    anyone (e.g. for permissionless oracle updates) while preventing lock or
+#    type substitution and preventing burns by non-owners.
+
+[package]
+name = "owned_type_bind_lock"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+ckb-std = "1.0"
+lean-oracle-common = { path = "../common" }
+
+[features]
+library = []
+native-simulator = ["library", "ckb-std/native-simulator"]
+
+[[bin]]
+name = "owned_type_bind_lock"
+path = "src/main.rs"

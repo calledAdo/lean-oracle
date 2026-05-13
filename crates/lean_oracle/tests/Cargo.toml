@@ -32,3 +32,5 @@ k256 = { version = "0.13.4", default-features = false, features = ["ecdsa"] }
 sha3 = { version = "0.10.8", default-features = false }
 # Decode Hermes JSON in `print-hermes --stdin`.
 serde_json = "1.0"
+# Property-based testing for encoder/decoder round-trip invariants.
+proptest = "1.5"

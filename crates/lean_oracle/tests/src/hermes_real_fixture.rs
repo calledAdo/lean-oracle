@@ -1,14 +1,19 @@
 //! Shared Hermes sample blob and guardian list used by `oracle_data_tests`,
 //! `oracle_integration_tests`, and the `print-hermes` binary.
 //!
-//! `REAL_HERMES_ACCUMULATOR_HEX` is the raw **`binary.data[0]`** from Hermes. The
-//! `REAL_HERMES_EXPECTED_*` constants are the canonical decode from the
-//! `lean-oracle-common` crate’s `pyth_accumulator` module for that blob (spot
-//! fields / expo / publish times must match Hermes’s own `parsed` view).
+//! ### Purpose
+//! This fixture is treated explicitly as a **parsing and decode-consistency
+//! fixture**. It proves that the saved `REAL_HERMES_ACCUMULATOR_HEX` decodes
+//! into the exact values Hermes reported in its parsed output (represented by
+//! the `REAL_HERMES_EXPECTED_*` constants).
 //!
-//! The hard-coded `REAL_GUARDIAN_SET` list can lag Wormhole mainnet rotations. If
-//! the embedded VAA’s `guardian_set_index` changes, **`verify_guardian_quorum`
-//! against this list may fail** until addresses are refreshed from chain.
+//! ### Guardian Set Note
+//! The hard-coded `REAL_GUARDIAN_SET` list is provided for exploratory
+//! verification only. Because it can lag Wormhole mainnet rotations, it is
+//! **not** a required passing source of truth for the "real" fixture. If the
+//! embedded VAA’s `guardian_set_index` changes, `verify_guardian_quorum` against
+//! this list may fail until addresses are refreshed.
+
 
 /// Off-chain Wormhole guardian addresses (Ethereum-style 20-byte hex strings).
 pub const REAL_GUARDIAN_SET: [&str; 19] = [

@@ -19,6 +19,8 @@ members = [
     "contracts/oracle_script",
     # The guardian-set state cell validator.
     "contracts/guardian_set_script",
+    # Permissionless-update lock with owner escape hatch (public oracle cells).
+    "contracts/owned_type_bind_lock",
     # Host-side tests that exercise the shared logic and protocol encoding.
     "tests",
 ]

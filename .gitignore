@@ -25,6 +25,7 @@ deployment/.env
 # Editor / OS
 .DS_Store
 Thumbs.db
+.claude/
 .idea/
 .vscode/
 *.swp
@@ -34,3 +35,5 @@ Thumbs.db
 deployment/node_modules/
 deployment/dist/
 deployment/artifacts/*.json
+deployment/artifacts/devnet*.json
+deployment/config/devnet.json

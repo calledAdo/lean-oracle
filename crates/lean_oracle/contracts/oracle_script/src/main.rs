@@ -23,6 +23,13 @@
 //! 7. load the governed guardian-set dep via guardian_set_type_hash
 //! 8. verify Wormhole guardian quorum
 //! 9. require the oracle output cell to match the authenticated message
+//!
+//! **Burn** (1 group input, 0 group outputs):
+//! Burn is the permissioned destruction path. The type script returns success
+//! unconditionally — the cell's **lock script** is the sole authority for who
+//! may destroy the cell. This is consistent with the personal-oracle model:
+//! whoever installed the cell under their own lock can reclaim the capacity at
+//! any time.
 
 // Compile without the standard library so the binary can run in CKB-VM.
 #![no_std]
@@ -82,26 +89,22 @@ pub fn program_entry() -> i8 {
     feed_id_bytes.copy_from_slice(&args);
     let feed_id = FeedId(feed_id_bytes);
 
-    // Enforce singleton script group shape.
-    // Both creation and update must have exactly one output in the group.
-    let output_count = QueryIter::new(load_cell_data, Source::GroupOutput).count();
-    if output_count != 1 {
-        return ERROR_INVALID_SCRIPT_GROUP;
-    }
-
-    // Determine script-group shape based on input count.
+    // Determine script-group shape based on input/output counts.
     let input_count = QueryIter::new(load_cell_data, Source::GroupInput).count();
+    let output_count = QueryIter::new(load_cell_data, Source::GroupOutput).count();
 
-    if input_count == 0 {
+    match (input_count, output_count) {
         // Creation path: exactly 0 inputs, 1 output.
-        return validate_creation(&feed_id);
-    } else if input_count == 1 {
+        (0, 1) => validate_creation(&feed_id),
         // Update path: exactly 1 input, 1 output.
-        return validate_update(&feed_id);
+        (1, 1) => validate_update(&feed_id),
+        // Burn path: exactly 1 input, 0 outputs. Authorization is delegated to
+        // the cell's lock script — the type script has no state transition to
+        // verify.
+        (1, 0) => 0,
+        // Any other shape (e.g. multi-input) is rejected.
+        _ => ERROR_INVALID_SCRIPT_GROUP,
     }
-
-    // Any other shape (e.g. multi-input) is rejected.
-    ERROR_INVALID_SCRIPT_GROUP
 }
 
 // Validate creation of a new oracle cell.

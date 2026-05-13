@@ -1,8 +1,16 @@
 # Lean Oracle SDK
 
-TypeScript SDK for the [Lean Oracle](../../crates/lean_oracle/README.md) on
-CKB. The package is intended to be the primary off-chain entry point for
+TypeScript SDK for the [Lean Oracle](https://github.com/calledAdo/lean-oracle)
+on CKB. The package is intended to be the primary off-chain entry point for
 applications that want to read or update the oracle on CKB testnet.
+
+- **License:** MIT
+- **Repository:** <https://github.com/calledAdo/lean-oracle> (SDK at
+  `packages/sdk`)
+- **Issues:** <https://github.com/calledAdo/lean-oracle/issues>
+
+> **Pre-release (`0.1.x`).** The curated root surface is stable; advanced
+> subpath exports may still change. Pin a version in production.
 
 Mainnet is not live yet. The first npm release is testnet-first; use
 `LeanOracleTestnetClient` or pass an explicit `LeanOracleNetworkConfig`.
@@ -57,12 +65,36 @@ console.log({
 });
 ```
 
+`state.data` decodes the full `OracleData` cell payload. Key fields:
+
+```ts
+interface LeanOracleDecodedCellData {
+  feedId: `0x${string}`;        // 32-byte Pyth price feed id
+  guardianSetTypeHash: string;  // code hash of the guardian-set cell dep
+  price: bigint;                // signed spot price, scaled by 10^expo
+  conf: bigint;                 // spot confidence
+  expo: number;                 // signed decimal exponent
+  publishTimeUnix: bigint;      // unix seconds
+  prevPublishTimeUnix: bigint;
+  emaPrice: bigint;
+  emaConf: bigint;
+  emitterChain: number;         // Wormhole emitter chain id
+  emitterAddress: string;       // 32-byte Wormhole emitter address
+}
+```
+
 Draft an update transaction. The returned transaction is structurally ready for
 the oracle update path but still needs normal fee inputs/change and signing:
 
 ```ts
+import { ccc } from "@ckb-ccc/core";
 import { LeanOracleTestnetClient } from "lean-oracle-sdk";
 import { rebalanceFuel } from "lean-oracle-sdk/fuel";
+
+// Build a CCC signer however your app does it. Minimal example:
+const cccClient = new ccc.ClientPublicTestnet();
+const signer = new ccc.SignerCkbPrivateKey(cccClient, process.env.CKB_PRIVATE_KEY!);
+const signerLockScript = (await signer.getRecommendedAddressObj()).script;
 
 const oracle = new LeanOracleTestnetClient({ cccClient });
 
@@ -81,6 +113,9 @@ if (rebalance.status !== "ok") {
 
 const txHash = await signer.sendTransaction(rebalance.mutated);
 ```
+
+See [Custom CCC client](#custom-ccc-client) below for sharing/injecting a
+preconfigured CCC `Client`.
 
 ## Finding Pyth Feed IDs
 
@@ -239,10 +274,9 @@ const cccClient = new ClientPublicTestnet({ url: process.env.CKB_RPC_URL });
 const oracle = new LeanOracleTestnetClient({ cccClient });
 ```
 
-> **Stability:** while the package is pre-release (`0.1.x`), advanced/subpath
-> exports may change shape more frequently than the curated root surface.
 > Prefer root imports when possible; reach for subpaths when you need
-> transaction-author-level control.
+> transaction-author-level control. See the pre-release stability note at the
+> top of this README.
 
 ### Code upgrades and cell versions
 

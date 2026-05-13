@@ -10,3 +10,7 @@ pub mod hermes_real_fixture;
 mod oracle_data_tests;
 #[cfg(test)]
 mod oracle_integration_tests;
+#[cfg(test)]
+mod owned_type_bind_lock_tests;
+#[cfg(test)]
+mod property_tests;

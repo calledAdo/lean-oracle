@@ -11,6 +11,7 @@ use std::io::Read;
 use lean_oracle_common::{
     guardian_set::GuardianSetData,
     pyth_accumulator::ParsedAccumulatorUpdateForFeed,
+    types::{FeedId, GuardianAddress},
     wormhole_verify::verify_guardian_quorum,
 };
 use tests::hermes_real_fixture::{
@@ -69,7 +70,7 @@ fn main() {
         decode_hex(REAL_HERMES_ACCUMULATOR_HEX).expect("decode fixture Hermes hex")
     };
 
-    let target_feed_id = decode_hex_32(BTC_USD_FEED_ID_HEX).expect("decode feed id");
+    let target_feed_id = FeedId(decode_hex_32(BTC_USD_FEED_ID_HEX).expect("decode feed id"));
 
     let parsed = ParsedAccumulatorUpdateForFeed::parse_for_feed(&accumulator_update, &target_feed_id)
         .expect("parse_for_feed failed");
@@ -77,12 +78,9 @@ fn main() {
     let guardian_set = GuardianSetData {
         set_index: parsed.vaa.guardian_set_index,
         quorum: 13,
-        creation_time: 0,
-        expiration_time: 0,
-        governance_lock_hash: [0u8; 32],
         guardian_addresses: REAL_GUARDIAN_SET
             .iter()
-            .map(|addr| decode_hex_20(addr).expect("decode guardian hex"))
+            .map(|addr| GuardianAddress(decode_hex_20(addr).expect("decode guardian hex")))
             .collect(),
     };
 
@@ -99,19 +97,19 @@ fn main() {
     println!("merkle_root (20 bytes): 0x{}", hex_bytes(&parsed.root_digest));
 
     println!("\n--- embedded Wormhole VAA ---");
-    println!("guardian_set_index: {}", parsed.vaa.guardian_set_index);
+    println!("guardian_set_index: {}", parsed.vaa.guardian_set_index.0);
     println!("signature_count: {}", parsed.vaa.signatures.len());
     println!("emitter_chain: {}", parsed.vaa.emitter_chain);
-    println!("emitter_address: 0x{}", hex_bytes(&parsed.vaa.emitter_address));
+    println!("emitter_address: 0x{}", hex_bytes(parsed.vaa.emitter_address.as_slice()));
     println!("sequence: {}", parsed.vaa.sequence);
     println!("timestamp: {}", parsed.vaa.timestamp);
     println!(
-        "verify_guardian_quorum (REAL_GUARDIAN_SET fixture; may fail after guardian rotation): {}",
-        quorum_ok
+        "verify_guardian_quorum (bundled REAL_GUARDIAN_SET; exploratory only): {}",
+        if quorum_ok { "OK" } else { "FAILED (Note: This is expected if Wormhole guardians have rotated since the fixture was saved)" }
     );
 
     println!("\n--- price message (BTC/USD feed) ---");
-    println!("feed_id (bytes): 0x{}", hex_bytes(&parsed.message.feed_id));
+    println!("feed_id (bytes): 0x{}", hex_bytes(parsed.message.feed_id.as_slice()));
     println!("price (raw): {}", parsed.message.price);
     println!("conf (raw): {}", parsed.message.conf);
     println!("expo: {}", parsed.message.expo);
@@ -122,7 +120,7 @@ fn main() {
 
     println!("\n--- matches REAL_HERMES_EXPECTED_* in hermes_real_fixture ---");
     let ok_slot = parsed.slot == REAL_HERMES_EXPECTED_ACCUMULATOR_SLOT;
-    let ok_idx = parsed.vaa.guardian_set_index == REAL_HERMES_EXPECTED_GUARDIAN_SET_INDEX;
+    let ok_idx = parsed.vaa.guardian_set_index.0 == REAL_HERMES_EXPECTED_GUARDIAN_SET_INDEX;
     let ok_msg = parsed.message.price == REAL_HERMES_EXPECTED_PRICE
         && parsed.message.conf == REAL_HERMES_EXPECTED_CONF
         && parsed.message.expo == REAL_HERMES_EXPECTED_EXPO
@@ -136,4 +134,7 @@ fn main() {
         "(only when stdin == fixture hex OR default mode) slot + guardian_set_index + spot fields OK: {}",
         ok_slot && ok_idx && ok_msg
     );
+    if ok_slot && ok_idx && ok_msg {
+        println!("Success: Decoded values match REAL_HERMES_EXPECTED_* constants.");
+    }
 }

@@ -62,3 +62,16 @@ pub const ERROR_GUARDIAN_SET_CONTINUITY: i8 = 30;
 
 // The guardian-set dep decoded but failed internal consistency checks.
 pub const ERROR_GUARDIAN_SET_INVALID: i8 = 31;
+
+// `OwnedTypeBindLock` errors.
+//
+// The lock's script args were not exactly 32 bytes (expected owner lock hash).
+pub const ERROR_BIND_LOCK_ARGS_MALFORMED: i8 = 40;
+// A group input is missing a type script. The bind lock refuses to guard cells
+// without a type identity to continue.
+pub const ERROR_BIND_LOCK_NO_TYPE_SCRIPT: i8 = 41;
+// Group input count and group output count must match. A mismatch means the
+// caller is trying to collapse or expand bound cells.
+pub const ERROR_BIND_LOCK_COUNT_MISMATCH: i8 = 42;
+// A group input's type hash had no matching type hash in any group output.
+pub const ERROR_BIND_LOCK_TYPE_NOT_FOUND: i8 = 43;
