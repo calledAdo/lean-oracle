@@ -1,0 +1,64 @@
+name: CI
+
+# Runs the three checks the README documents as required before opening a PR:
+#   make contracts-test
+#   (cd packages/sdk && npm run release:check)
+#   (cd deployment   && npm test)
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel superseded runs on the same ref to save CI minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contracts:
+    name: Contracts (host tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/lean_oracle
+      - name: contracts-test
+        run: make contracts-test
+
+  sdk:
+    name: SDK (release:check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: packages/sdk/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+        working-directory: packages/sdk
+      - name: release:check
+        run: npm run release:check
+        working-directory: packages/sdk
+
+  deployment:
+    name: Deployment toolbox (tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: deployment/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+        working-directory: deployment
+      - name: test
+        run: npm test
+        working-directory: deployment

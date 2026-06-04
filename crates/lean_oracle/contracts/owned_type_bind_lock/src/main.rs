@@ -24,6 +24,7 @@
 //!     - `|GroupInput| == |GroupOutput|` (no 2→1 collapse, no extra outputs)
 //!     - Every group-input type hash appears in the group outputs (type
 //!       identity is preserved per cell)
+//!
 //!   Lock continuity is implicit: outputs that share this lock's group are by
 //!   definition output cells whose lock matches this lock's script hash.
 //!

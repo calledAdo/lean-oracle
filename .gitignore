@@ -34,6 +34,7 @@ Thumbs.db
 # Deployment toolbox (do not commit local npm install / tsc output)
 deployment/node_modules/
 deployment/dist/
-deployment/artifacts/*.json
+# Only generated local devnet artifacts are ignored; checked-in testnet/mainnet
+# artifacts under deployment/artifacts/ are intentionally tracked (see README).
 deployment/artifacts/devnet*.json
 deployment/config/devnet.json

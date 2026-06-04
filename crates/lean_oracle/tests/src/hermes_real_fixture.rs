@@ -62,7 +62,7 @@ pub const REAL_HERMES_EXPECTED_EMA_PRICE: i64 = 7_821_490_000_000;
 pub const REAL_HERMES_EXPECTED_EMA_CONF: u64 = 2_605_070_040;
 
 pub fn decode_hex(hex: &str) -> Result<Vec<u8>, ()> {
-    if hex.len() % 2 != 0 {
+    if !hex.len().is_multiple_of(2) {
         return Err(());
     }
 
