@@ -111,7 +111,9 @@ pub fn program_entry() -> i8 {
 //
 // Creation anchors oracle configuration to a canonical guardian-set lineage
 // (by requiring the guardian-set dep referenced by `guardian_set_type_hash`
-// to be present and valid). It does not authenticate the price fields.
+// to be present and valid). It does not authenticate the price fields — instead
+// it forces them to zero (v3), so authenticity is provable downstream by a
+// nonzero `publish_time`.
 fn validate_creation(feed_id_args: &FeedId) -> i8 {
     // Load the oracle output cell's data.
     let output = match load_cell_data(0, Source::GroupOutput) {
@@ -128,6 +130,24 @@ fn validate_creation(feed_id_args: &FeedId) -> i8 {
     // Feed id must match the script args.
     if &state.feed_id != feed_id_args {
         return ERROR_INVALID_FEED_ID;
+    }
+
+    // v3: a freshly created cell is UNAUTHENTICATED — it has verified no Pyth VAA
+    // yet, so its price fields are caller-controlled. Force an *uninitialized*
+    // state at creation (all price/time fields zero). Combined with the update
+    // path (which writes these only from a verified VAA, with strictly-increasing
+    // `publish_time`), this gives consumers a cheap CellDep test: a nonzero
+    // `publish_time` ⟹ the price is authentic. Without this, anyone could mint a
+    // config-matching cell carrying a fabricated price and have it read as real.
+    if state.publish_time != 0
+        || state.prev_publish_time != 0
+        || state.price != 0
+        || state.conf != 0
+        || state.expo != 0
+        || state.ema_price != 0
+        || state.ema_conf != 0
+    {
+        return ERROR_CREATION_STATE_NONZERO;
     }
 
     // Load the governed guardian-set dep via the type hash in oracle state.
