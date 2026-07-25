@@ -41,15 +41,15 @@ export const leanOracleTestnetPreset: LeanOracleNetworkConfig = {
       },
     },
     // Current (latest) oracle type-script version — used by default for
-    // discovery, update, deploy, and burn. Equals `oracleTypeVersions[2]`.
+    // discovery, update, deploy, and burn. Equals `oracleTypeVersions[3]`.
     oracleType: {
       codeHash:
-        "0x10c9bcc3af00fc3728cb95d5e14ec882716af5f531a010852526ce784f6958ec",
+        "0xb2a48cc368e55269e4bd10a6548a1ff3a18aff7a290927268b42f42ecb197d63",
       hashType: "data2",
       codeDep: {
         outPoint: {
           txHash:
-            "0x45f033f0944b50be1e5b80f733c321648ddcfdbe0c183477cf0b77bd0f8312b5",
+            "0xf794a02d605a1d76cb6610c9c6bb344165f96d1b4bf27e695d7f5ce0c3542d3b",
           index: 0n,
         },
         depType: "code",
@@ -76,7 +76,7 @@ export const leanOracleTestnetPreset: LeanOracleNetworkConfig = {
           depType: "code",
         },
       },
-      // v2 — current; adds the burn (1 input, 0 outputs) group shape.
+      // v2 — adds the burn (1 input, 0 outputs) group shape.
       2: {
         codeHash:
           "0x10c9bcc3af00fc3728cb95d5e14ec882716af5f531a010852526ce784f6958ec",
@@ -85,6 +85,21 @@ export const leanOracleTestnetPreset: LeanOracleNetworkConfig = {
           outPoint: {
             txHash:
               "0x45f033f0944b50be1e5b80f733c321648ddcfdbe0c183477cf0b77bd0f8312b5",
+            index: 0n,
+          },
+          depType: "code",
+        },
+      },
+      // v3 — current; zero-initializes price state at creation, so a nonzero
+      // publish_time provably means the cell was authenticated by an update.
+      3: {
+        codeHash:
+          "0xb2a48cc368e55269e4bd10a6548a1ff3a18aff7a290927268b42f42ecb197d63",
+        hashType: "data2",
+        codeDep: {
+          outPoint: {
+            txHash:
+              "0xf794a02d605a1d76cb6610c9c6bb344165f96d1b4bf27e695d7f5ce0c3542d3b",
             index: 0n,
           },
           depType: "code",

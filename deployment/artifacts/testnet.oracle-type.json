@@ -1,7 +1,7 @@
 {
   "network": "testnet",
   "action": "promote:oracle-type",
-  "generatedAt": "2026-05-11T10:14:58.877Z",
+  "generatedAt": "2026-07-25T20:21:07.033Z",
   "deployment": {
     "scriptFamily": "oracle-type",
     "versions": {
@@ -26,6 +26,17 @@
         "capacity": "11428500000000",
         "version": 2,
         "promotedAt": "2026-05-11T10:14:58.877Z"
+      },
+      "3": {
+        "mode": "broadcast",
+        "codeHash": "0xb2a48cc368e55269e4bd10a6548a1ff3a18aff7a290927268b42f42ecb197d63",
+        "hashType": "data2",
+        "depType": "code",
+        "txHash": "0xf794a02d605a1d76cb6610c9c6bb344165f96d1b4bf27e695d7f5ce0c3542d3b",
+        "index": 0,
+        "capacity": "11437300000000",
+        "version": 3,
+        "promotedAt": "2026-07-25T20:21:07.033Z"
       }
     }
   }

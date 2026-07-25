@@ -1559,13 +1559,16 @@ fn test_oracle_creation_succeeds_with_valid_guardian_dep_and_no_witness() {
     let oracle_state = OracleData {
         feed_id,
         guardian_set_type_hash,
-        price: 123,
-        conf: 456,
-        expo: -8,
-        publish_time: 5000,
-        prev_publish_time: 4990,
-        ema_price: 120,
-        ema_conf: 400,
+        // v3: creation must produce an *uninitialized* cell — all price/time
+        // fields zero. Only config (feed id, guardian-set lineage, emitter) is
+        // anchored here; the price is authenticated later by an update.
+        price: 0,
+        conf: 0,
+        expo: 0,
+        publish_time: 0,
+        prev_publish_time: 0,
+        ema_price: 0,
+        ema_conf: 0,
         emitter_chain: 26,
         emitter_address,
     };
@@ -1586,6 +1589,79 @@ fn test_oracle_creation_succeeds_with_valid_guardian_dep_and_no_witness() {
 }
 
 #[test]
+fn test_oracle_creation_rejects_nonzero_price_state() {
+    // v3: creation does not authenticate a Pyth VAA, so the price fields are
+    // caller-controlled. The script must reject any created cell whose price/time
+    // state is nonzero, so that a nonzero `publish_time` provably means the cell
+    // was authenticated by an update. Otherwise anyone could mint a config-matching
+    // cell carrying a fabricated price and have it read as authentic over a CellDep.
+    let mut context = Context::default();
+    let oracle_type_op = load_oracle_type(&mut context);
+    let guardian_set_type_op = load_guardian_set_type(&mut context);
+    let always_success_op = deploy_always_success(&mut context);
+
+    let lock = context
+        .build_script(&always_success_op, ckb_testtool::ckb_types::bytes::Bytes::from_static(b"lock"))
+        .expect("build lock");
+
+    let guardian_set_type_script = context
+        .build_script(&guardian_set_type_op, ckb_testtool::ckb_types::bytes::Bytes::from(vec![0xCCu8; 32]))
+        .expect("build guardian set type");
+    let guardian_set_type_hash: [u8; 32] = guardian_set_type_script.calc_script_hash().unpack();
+
+    let guardian_set_data = GuardianSetData {
+        set_index: GuardianSetIndex(1u32),
+        quorum: 1,
+        guardian_addresses: vec![GuardianAddress([0x11u8; 20])],
+    };
+    let guardian_dep_out_point = context.create_cell(
+        CellOutput::new_builder()
+            .capacity(100_000_000_000u64)
+            .lock(lock)
+            .type_(Some(guardian_set_type_script).pack())
+            .build(),
+        ckb_testtool::ckb_types::bytes::Bytes::from(guardian_set_data.to_bytes()),
+    );
+
+    let feed_id = FeedId([0xAAu8; 32]);
+    let emitter_address = EmitterAddress([0x55u8; 32]);
+
+    // Otherwise-valid creation, but with a single nonzero price field. Even with a
+    // valid guardian-set dep present, the zero-state check must reject it — and it
+    // runs before guardian validation, so the error is CREATION_STATE_NONZERO.
+    let oracle_state = OracleData {
+        feed_id,
+        guardian_set_type_hash,
+        price: 0,
+        conf: 0,
+        expo: 0,
+        publish_time: 1, // nonzero ⇒ must be rejected at creation
+        prev_publish_time: 0,
+        ema_price: 0,
+        ema_conf: 0,
+        emitter_chain: 26,
+        emitter_address,
+    };
+
+    let tx = build_oracle_creation_tx(
+        &mut context,
+        &oracle_type_op,
+        &guardian_set_type_op,
+        &always_success_op,
+        &oracle_state,
+        vec![guardian_dep_out_point],
+        None,
+    );
+
+    let err = context
+        .verify_tx(&tx, MAX_CYCLES)
+        .expect_err("oracle creation with nonzero price state must fail");
+    assert!(err
+        .to_string()
+        .contains(&format!("error code {}", ERROR_CREATION_STATE_NONZERO)));
+}
+
+#[test]
 fn test_oracle_creation_fails_without_guardian_dep() {
     let mut context = Context::default();
     let oracle_type_op = load_oracle_type(&mut context);
@@ -1602,13 +1678,14 @@ fn test_oracle_creation_fails_without_guardian_dep() {
     let oracle_state = OracleData {
         feed_id,
         guardian_set_type_hash,
-        price: 3000,
-        conf: 75,
-        expo: -8,
-        publish_time: 5000,
-        prev_publish_time: 4990,
-        ema_price: 2995,
-        ema_conf: 60,
+        // v3: creation must produce an uninitialized (zeroed) price state.
+        price: 0,
+        conf: 0,
+        expo: 0,
+        publish_time: 0,
+        prev_publish_time: 0,
+        ema_price: 0,
+        ema_conf: 0,
         emitter_chain: 26,
         emitter_address,
     };
@@ -1679,13 +1756,16 @@ fn test_oracle_creation_fails_with_mismatched_guardian_dep() {
     let oracle_state = OracleData {
         feed_id,
         guardian_set_type_hash: canonical_type_hash,
-        price: 123,
-        conf: 456,
-        expo: -8,
-        publish_time: 5000,
-        prev_publish_time: 4990,
-        ema_price: 120,
-        ema_conf: 400,
+        // v3: creation must produce an *uninitialized* cell — all price/time
+        // fields zero. Only config (feed id, guardian-set lineage, emitter) is
+        // anchored here; the price is authenticated later by an update.
+        price: 0,
+        conf: 0,
+        expo: 0,
+        publish_time: 0,
+        prev_publish_time: 0,
+        ema_price: 0,
+        ema_conf: 0,
         emitter_chain: 26,
         emitter_address,
     };
@@ -1753,13 +1833,16 @@ fn test_oracle_creation_fails_if_multiple_matching_guardian_deps_exist() {
     let oracle_state = OracleData {
         feed_id,
         guardian_set_type_hash,
-        price: 123,
-        conf: 456,
-        expo: -8,
-        publish_time: 5000,
-        prev_publish_time: 4990,
-        ema_price: 120,
-        ema_conf: 400,
+        // v3: creation must produce an *uninitialized* cell — all price/time
+        // fields zero. Only config (feed id, guardian-set lineage, emitter) is
+        // anchored here; the price is authenticated later by an update.
+        price: 0,
+        conf: 0,
+        expo: 0,
+        publish_time: 0,
+        prev_publish_time: 0,
+        ema_price: 0,
+        ema_conf: 0,
         emitter_chain: 26,
         emitter_address,
     };
@@ -1817,13 +1900,16 @@ fn test_oracle_creation_fails_if_guardian_dep_data_is_malformed() {
     let oracle_state = OracleData {
         feed_id,
         guardian_set_type_hash,
-        price: 123,
-        conf: 456,
-        expo: -8,
-        publish_time: 5000,
-        prev_publish_time: 4990,
-        ema_price: 120,
-        ema_conf: 400,
+        // v3: creation must produce an *uninitialized* cell — all price/time
+        // fields zero. Only config (feed id, guardian-set lineage, emitter) is
+        // anchored here; the price is authenticated later by an update.
+        price: 0,
+        conf: 0,
+        expo: 0,
+        publish_time: 0,
+        prev_publish_time: 0,
+        ema_price: 0,
+        ema_conf: 0,
         emitter_chain: 26,
         emitter_address,
     };
@@ -1883,13 +1969,16 @@ fn test_oracle_creation_fails_if_guardian_dep_decodes_but_is_invalid() {
     let oracle_state = OracleData {
         feed_id,
         guardian_set_type_hash,
-        price: 123,
-        conf: 456,
-        expo: -8,
-        publish_time: 5000,
-        prev_publish_time: 4990,
-        ema_price: 120,
-        ema_conf: 400,
+        // v3: creation must produce an *uninitialized* cell — all price/time
+        // fields zero. Only config (feed id, guardian-set lineage, emitter) is
+        // anchored here; the price is authenticated later by an update.
+        price: 0,
+        conf: 0,
+        expo: 0,
+        publish_time: 0,
+        prev_publish_time: 0,
+        ema_price: 0,
+        ema_conf: 0,
         emitter_chain: 26,
         emitter_address,
     };
