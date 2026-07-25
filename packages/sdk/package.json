@@ -1,6 +1,6 @@
 {
   "name": "lean-oracle-sdk",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "TypeScript SDK for the Lean Oracle on CKB testnet.",
   "license": "MIT",
   "author": "calledAdo <destinyadokiye8@gmail.com>",

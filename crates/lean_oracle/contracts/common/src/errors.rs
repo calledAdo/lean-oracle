@@ -75,3 +75,8 @@ pub const ERROR_BIND_LOCK_NO_TYPE_SCRIPT: i8 = 41;
 pub const ERROR_BIND_LOCK_COUNT_MISMATCH: i8 = 42;
 // A group input's type hash had no matching type hash in any group output.
 pub const ERROR_BIND_LOCK_TYPE_NOT_FOUND: i8 = 43;
+
+// v3: a newly created oracle cell carried nonzero price state. Creation must
+// produce an *uninitialized* cell (all price/time fields zero) so that a nonzero
+// `publish_time` provably means the cell has been authenticated by an update.
+pub const ERROR_CREATION_STATE_NONZERO: i8 = 44;

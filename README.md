@@ -171,7 +171,8 @@ Guardian set index **6**, quorum **13** (Wormhole mainnet guardians).
 
 | Component | Version | Code Hash | Deploy Tx |
 |---|---|---|---|
-| `oracle_type`           | v2 (latest) | `0x10c9bcc3af00fc3728cb95d5e14ec882716af5f531a010852526ce784f6958ec` | `0x45f033f0944b50be1e5b80f733c321648ddcfdbe0c183477cf0b77bd0f8312b5` |
+| `oracle_type`           | v3 (latest) | `0xb2a48cc368e55269e4bd10a6548a1ff3a18aff7a290927268b42f42ecb197d63` | `0xf794a02d605a1d76cb6610c9c6bb344165f96d1b4bf27e695d7f5ce0c3542d3b` |
+| `oracle_type`           | v2 (legacy) | `0x10c9bcc3af00fc3728cb95d5e14ec882716af5f531a010852526ce784f6958ec` | `0x45f033f0944b50be1e5b80f733c321648ddcfdbe0c183477cf0b77bd0f8312b5` |
 | `oracle_type`           | v1 (legacy) | `0x2277560d62a11a92084654b67848ea893fcf3c1880e20a3ce9c0c19d0ee27dc3` | `0xf39d3cb5eccab560bdab65529f4e6f86c2dc8c966a4d49a2fd17bb277e75bba2` |
 | `guardian_set_type`     | v1          | `0x57bddf3d57ea45c88ab68d0de706bbaecd68895fd6062b099626deb157100119` | `0x78f83c3967c566c50c783d45c9165af94d23018c5254228b3eb418aa0c5ac37f` |
 | `owned_type_bind_lock`  | v1          | `0x5554bc20c9f3dbb8d1d7a6591b1b2ceeb0bbee822804635ee168911a440a111c` | `0x982a5d5555ebc855a97d9e71a8ac9de9cefc25a62a44ccfc2b6605758c01ba9f` |
