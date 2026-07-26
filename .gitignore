@@ -28,6 +28,7 @@ Thumbs.db
 .claude/
 .idea/
 .vscode/
+.worktrees/
 *.swp
 *.swo
 
