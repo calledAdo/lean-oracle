@@ -7,6 +7,7 @@ export type DeploymentAction =
   | "deploy:guardian-set"
   | "deploy:guardian-set-candidate"
   | "rotate:guardian-set"
+  | "migrate:owned-bind-guardian"
   | "deploy:oracle"
   | "promote:guardian-set-type"
   | "promote:oracle-type"

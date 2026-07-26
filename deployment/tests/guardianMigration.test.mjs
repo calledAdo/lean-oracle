@@ -6,7 +6,10 @@ import test from "node:test";
 
 import { ccc } from "@ckb-ccc/core";
 
-import { writeDeploymentArtifact } from "../dist/artifacts.js";
+import {
+  writeDeploymentActionArtifacts,
+  writeDeploymentArtifact,
+} from "../dist/artifacts.js";
 import { loadLatestCanonicalCodeVersion } from "../dist/codeVersions.js";
 import {
   assertGuardianSetCandidateReadback,
@@ -17,6 +20,10 @@ import {
   runDeploymentAction,
 } from "../dist/deploy.js";
 import { waitForCommittedTransaction } from "../dist/chainFinality.js";
+import {
+  buildGuardianMigrationPromotion,
+  nextGuardianMigrationPhase,
+} from "../dist/guardianMigration.js";
 
 const guardianCode = {
   version: 3,
@@ -205,4 +212,231 @@ test("commitment waiter returns committed evidence and rejects chain rejection",
       ),
     /guardian candidate transaction .* was rejected/u,
   );
+});
+
+function promotionEvidence() {
+  const guardianCandidate = {
+    kind: "deploy:guardian-set-candidate",
+    mode: "broadcast",
+    network: "testnet",
+    identityVersion: 4,
+    fullTypeHash: `0x${"61".repeat(32)}`,
+    verifiedAtBlock: "100",
+    guardianSetType: {
+      version: 3,
+      codeVersion: 3,
+      codeHash: guardianCode.codeHash,
+      hashType: guardianCode.hashType,
+      depType: "code",
+      outPoint: { txHash: guardianCode.txHash, index: 0 },
+      args: `0x${"62".repeat(32)}`,
+    },
+    guardianSetLock: {
+      codeVersion: 2,
+      codeHash: bindLockCode.codeHash,
+      hashType: bindLockCode.hashType,
+      depType: "code",
+      outPoint: { txHash: bindLockCode.txHash, index: 0 },
+      script: {
+        codeHash: bindLockCode.codeHash,
+        hashType: bindLockCode.hashType,
+        args: `0x${"63".repeat(32)}`,
+      },
+    },
+    guardianSet: canonicalSet7,
+    deployed: {
+      txHash: `0x${"64".repeat(32)}`,
+      index: 0,
+      typeIdArgs: `0x${"62".repeat(32)}`,
+      capacity: "52600000000",
+    },
+  };
+  const oldGuardianState = {
+    kind: "deploy:guardian-set",
+    deployed: { txHash: `0x${"65".repeat(32)}`, index: 0 },
+  };
+  const oracleTemplate = {
+    kind: "deploy:oracle",
+    mode: "broadcast",
+    network: "testnet",
+    oracleType: { version: 4 },
+    ownedTypeBindLock: { version: 2 },
+    guardianSet: {},
+    oracleConfig: { feedId: `0x${"66".repeat(32)}` },
+    deployed: { txHash: `0x${"67".repeat(32)}`, index: 0 },
+  };
+  const stagingOracle = {
+    outPoint: { txHash: `0x${"68".repeat(32)}`, index: 0 },
+    guardianSetTypeHash: guardianCandidate.fullTypeHash,
+    publishTimeUnix: 200n,
+  };
+  const oldOracleBurn = {
+    outPoint: oracleTemplate.deployed,
+    live: false,
+    txHash: `0x${"69".repeat(32)}`,
+  };
+  const expectedPublicLockHash = `0x${"6a".repeat(32)}`;
+  const finalPublicOracle = {
+    outPoint: { txHash: `0x${"6b".repeat(32)}`, index: 0 },
+    guardianSetTypeHash: guardianCandidate.fullTypeHash,
+    publishTimeUnix: 201n,
+    lockHash: expectedPublicLockHash,
+  };
+  return {
+    guardianCandidate,
+    oldGuardianState,
+    oracleTemplate,
+    stagingOracle,
+    oldOracleBurn,
+    expectedPublicLockHash,
+    finalPublicOracle,
+  };
+}
+
+test("promotion requires authenticated staging, a dead old oracle, and newer public state", () => {
+  const evidence = promotionEvidence();
+  const promotion = buildGuardianMigrationPromotion(evidence);
+  assert.equal(promotion.mode, "broadcast");
+  assert.equal(promotion.canonicalGuardianState.identityVersion, 4);
+  assert.equal(promotion.canonicalGuardianState.guardianSetType.version, 4);
+  assert.equal(promotion.canonicalGuardianState.guardianSetType.codeVersion, 3);
+  assert.equal(
+    promotion.canonicalOracleState.guardianSet.guardianSetTypeHash,
+    evidence.guardianCandidate.fullTypeHash,
+  );
+  assert.deepEqual(
+    promotion.canonicalOracleState.deployed,
+    evidence.finalPublicOracle.outPoint,
+  );
+
+  assert.throws(
+    () =>
+      buildGuardianMigrationPromotion({
+        ...evidence,
+        guardianCandidate: {
+          ...evidence.guardianCandidate,
+          guardianSetLock: {
+            ...evidence.guardianCandidate.guardianSetLock,
+            codeVersion: 1,
+          },
+        },
+      }),
+    /bind-lock.*version 2/iu,
+  );
+  assert.throws(
+    () =>
+      buildGuardianMigrationPromotion({
+        ...evidence,
+        oldOracleBurn: undefined,
+      }),
+    /old public oracle.*not verified dead/iu,
+  );
+  assert.throws(
+    () =>
+      buildGuardianMigrationPromotion({
+        ...evidence,
+        oldOracleBurn: { ...evidence.oldOracleBurn, live: true },
+      }),
+    /old public oracle.*not verified dead/iu,
+  );
+  assert.throws(
+    () =>
+      buildGuardianMigrationPromotion({
+        ...evidence,
+        finalPublicOracle: {
+          ...evidence.finalPublicOracle,
+          publishTimeUnix: evidence.stagingOracle.publishTimeUnix,
+        },
+      }),
+    /strictly newer/iu,
+  );
+});
+
+test("migration phase resolver resumes after every committed checkpoint", () => {
+  assert.equal(nextGuardianMigrationPhase({}), "verify-guardian");
+  assert.equal(
+    nextGuardianMigrationPhase({ guardianVerified: true }),
+    "create-staging",
+  );
+  assert.equal(
+    nextGuardianMigrationPhase({ guardianVerified: true, stagingCreated: {} }),
+    "authenticate-staging",
+  );
+  assert.equal(
+    nextGuardianMigrationPhase({
+      guardianVerified: true,
+      stagingCreated: {},
+      stagingOracle: {},
+    }),
+    "burn-old-oracle",
+  );
+  assert.equal(
+    nextGuardianMigrationPhase({
+      guardianVerified: true,
+      stagingCreated: {},
+      stagingOracle: {},
+      oldOracleBurn: {},
+    }),
+    "migrate-public",
+  );
+  assert.equal(
+    nextGuardianMigrationPhase({
+      guardianVerified: true,
+      stagingCreated: {},
+      stagingOracle: {},
+      oldOracleBurn: {},
+      finalPublicOracle: {},
+    }),
+    "promote",
+  );
+  assert.equal(
+    nextGuardianMigrationPhase({
+      guardianVerified: true,
+      stagingCreated: {},
+      stagingOracle: {},
+      oldOracleBurn: {},
+      finalPublicOracle: {},
+      promoted: true,
+    }),
+    "complete",
+  );
+  assert.throws(
+    () =>
+      nextGuardianMigrationPhase({
+        guardianVerified: true,
+        stagingCreated: {},
+        oldOracleBurn: {},
+      }),
+    /out of order/iu,
+  );
+});
+
+test("migration artifact write advances guardian and oracle canonical files before receipt", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "guardian-migration-"));
+  try {
+    const promotion = buildGuardianMigrationPromotion(promotionEvidence());
+    const result = writeDeploymentActionArtifacts(
+      root,
+      "testnet",
+      "migrate:owned-bind-guardian",
+      promotion,
+    );
+    assert.equal(result.artifactPaths.length, 3);
+    const guardian = JSON.parse(
+      fs.readFileSync(path.join(root, "artifacts/testnet.deploy-guardian-set.json")),
+    );
+    const oracle = JSON.parse(
+      fs.readFileSync(path.join(root, "artifacts/testnet.deploy-oracle.json")),
+    );
+    const receipt = JSON.parse(
+      fs.readFileSync(
+        path.join(root, "artifacts/testnet.migrate-owned-bind-guardian.json"),
+      ),
+    );
+    assert.equal(guardian.deployment.identityVersion, 4);
+    assert.equal(oracle.deployment.oracleType.version, 4);
+    assert.equal(receipt.deployment.phase, "promoted");
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });

@@ -115,23 +115,62 @@ function parseGuardianSetUpgradeVaa(vaa: Uint8Array): ParsedUpgrade {
   return { signingSetIndex, newIndex, addresses };
 }
 
-function readTypeIdArgsFromArtifact(deploymentRoot: string, network: string): string {
-  const p = path.join(deploymentRoot, "artifacts", `${network}.deploy-guardian-set.json`);
-  if (!fs.existsSync(p)) {
-    throw new Error(
-      `Cannot resolve guardian-set Type ID args: missing ${p}. Set GUARDIAN_SET_TYPE_ID_ARGS.`,
-    );
-  }
-  const env = JSON.parse(fs.readFileSync(p, "utf8")) as {
-    deployment?: { deployed?: { typeIdArgs?: string } };
+interface GuardianStateArtifact {
+  kind?: string;
+  mode?: string;
+  network?: string;
+  identityVersion?: number;
+  fullTypeHash?: string;
+  guardianSetType?: Record<string, unknown>;
+  guardianSetLock?: {
+    depType?: "code" | "depGroup";
+    outPoint?: { txHash: string; index: number };
+    script?: { codeHash: string; hashType: string; args: string };
   };
-  const args = env.deployment?.deployed?.typeIdArgs;
-  if (!args) {
-    throw new Error(
-      `guardian-set state artifact ${p} has no deployed.typeIdArgs. Set GUARDIAN_SET_TYPE_ID_ARGS.`,
-    );
+  guardianSet?: GuardianSetConfig;
+  deployed?: {
+    txHash: string;
+    index: number;
+    typeIdArgs?: string;
+    capacity: string | bigint;
+  };
+  [key: string]: unknown;
+}
+
+function readGuardianStateArtifact(
+  deploymentRoot: string,
+  network: string,
+): GuardianStateArtifact | undefined {
+  const p = path.join(deploymentRoot, "artifacts", `${network}.deploy-guardian-set.json`);
+  if (!fs.existsSync(p)) return undefined;
+  const env = JSON.parse(fs.readFileSync(p, "utf8")) as {
+    deployment?: GuardianStateArtifact;
+  };
+  return env.deployment;
+}
+
+export function buildRotatedGuardianCanonicalState(params: {
+  priorState?: GuardianStateArtifact;
+  nextSet: GuardianSetConfig;
+  deployed: {
+    txHash: string;
+    index: number;
+    typeIdArgs: string;
+    capacity: string | bigint;
+  };
+  fallback?: GuardianStateArtifact;
+}): GuardianStateArtifact {
+  const base = params.priorState ?? params.fallback;
+  if (!base) {
+    throw new Error("Cannot project guardian rotation without canonical metadata");
   }
-  return args;
+  return {
+    ...base,
+    kind: "deploy:guardian-set",
+    mode: "broadcast",
+    guardianSet: params.nextSet,
+    deployed: params.deployed,
+  };
 }
 
 /**
@@ -165,9 +204,18 @@ export async function rotateGuardianSetStateCell(params: {
   const hashType = (gsTypeVersion as unknown as { hashType?: string }).hashType;
   if (!hashType) throw new Error("guardian-set-type version missing hashType");
 
+  const guardianState = readGuardianStateArtifact(
+    ctx.paths.deploymentRoot,
+    ctx.network,
+  );
   const typeIdArgs =
     ctx.env.guardianSetTypeIdArgs ||
-    readTypeIdArgsFromArtifact(ctx.paths.deploymentRoot, ctx.network);
+    guardianState?.deployed?.typeIdArgs;
+  if (!typeIdArgs) {
+    throw new Error(
+      "Cannot resolve guardian-set Type ID args from the canonical state artifact. Set GUARDIAN_SET_TYPE_ID_ARGS.",
+    );
+  }
 
   const nextSet: GuardianSetConfig = {
     setIndex: upgrade.newIndex,
@@ -195,6 +243,33 @@ export async function rotateGuardianSetStateCell(params: {
     liveCell = cell;
   }
   if (!liveCell) throw new Error("No live guardian-set cell found for the configured type script");
+
+  const configuredLock = guardianState?.guardianSetLock;
+  let lockCodeDep:
+    | {
+        outPoint: { txHash: string; index: bigint };
+        depType: "code" | "depGroup";
+      }
+    | undefined;
+  if (configuredLock?.script) {
+    const expectedLock = ccc.Script.from({
+      codeHash: configuredLock.script.codeHash,
+      hashType: configuredLock.script.hashType as ccc.HashTypeLike,
+      args: configuredLock.script.args,
+    });
+    if (!liveCell.cellOutput.lock.eq(expectedLock)) {
+      throw new Error("Guardian-set live lock does not match canonical guardianSetLock metadata");
+    }
+    if (configuredLock.outPoint) {
+      lockCodeDep = {
+        outPoint: {
+          txHash: configuredLock.outPoint.txHash,
+          index: BigInt(configuredLock.outPoint.index),
+        },
+        depType: configuredLock.depType ?? "code",
+      };
+    }
+  }
 
   const currentSet = decodeGuardianSetData(hexToBytes(ccc.hexFrom(liveCell.outputData)));
   if (upgrade.signingSetIndex !== currentSet.setIndex) {
@@ -229,6 +304,7 @@ export async function rotateGuardianSetStateCell(params: {
         outPoint: { txHash: gsTypeVersion.txHash, index: BigInt(gsTypeVersion.index) },
         depType: "code" as const,
       },
+      ...(lockCodeDep ? [lockCodeDep] : []),
     ],
   });
 
@@ -261,6 +337,15 @@ export async function rotateGuardianSetStateCell(params: {
           },
           depType: gsTypeVersion.depType,
         },
+        lockCodeDep: lockCodeDep
+          ? {
+              outPoint: {
+                txHash: lockCodeDep.outPoint.txHash,
+                index: Number(lockCodeDep.outPoint.index),
+              },
+              depType: lockCodeDep.depType,
+            }
+          : undefined,
         unsignedTransition: ccc.hexFrom(tx.toBytes()),
       },
     };
@@ -305,27 +390,30 @@ export async function rotateGuardianSetStateCell(params: {
     verifiedAtBlock: committed.blockNumber?.toString(),
     nextSet,
     deployed: { txHash, index: 0, capacity: tx.outputs[0].capacity },
-    canonicalState: {
-      kind: "deploy:guardian-set",
-      mode: "broadcast",
-      network: ctx.network,
-      guardianSetType: {
-        version: gsTypeVersion.version,
-        codeHash: gsTypeVersion.codeHash,
-        hashType,
-        depType: gsTypeVersion.depType,
-        outPoint: {
-          txHash: gsTypeVersion.txHash,
-          index: gsTypeVersion.index,
-        },
-      },
-      guardianSet: nextSet,
+    canonicalState: buildRotatedGuardianCanonicalState({
+      priorState: guardianState,
+      nextSet,
       deployed: {
         txHash,
         index: 0,
         typeIdArgs,
         capacity: tx.outputs[0].capacity,
       },
-    },
+      fallback: {
+        kind: "deploy:guardian-set",
+        mode: "broadcast",
+        network: ctx.network,
+        guardianSetType: {
+          version: gsTypeVersion.version,
+          codeHash: gsTypeVersion.codeHash,
+          hashType,
+          depType: gsTypeVersion.depType,
+          outPoint: {
+            txHash: gsTypeVersion.txHash,
+            index: gsTypeVersion.index,
+          },
+        },
+      },
+    }),
   };
 }

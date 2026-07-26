@@ -206,11 +206,48 @@ export function writeDeploymentActionArtifacts(
     }
   }
 
+  if (
+    action === "migrate:owned-bind-guardian" &&
+    deployment &&
+    typeof deployment === "object"
+  ) {
+    const migration = deployment as {
+      canonicalGuardianState?: unknown;
+      canonicalOracleState?: unknown;
+    };
+    if (
+      migration.canonicalGuardianState === undefined ||
+      migration.canonicalOracleState === undefined
+    ) {
+      throw new Error(
+        "Guardian migration artifact is missing canonical guardian/oracle state",
+      );
+    }
+    prepared.push(
+      prepareDeploymentArtifact(
+        deploymentRoot,
+        network,
+        "deploy:guardian-set",
+        migration.canonicalGuardianState,
+      ),
+      prepareDeploymentArtifact(
+        deploymentRoot,
+        network,
+        "deploy:oracle",
+        migration.canonicalOracleState,
+      ),
+    );
+  }
+
   // Advance the canonical pointer before its audit receipt. A process crash
   // between the two atomic renames can then lose only audit freshness; state
   // consumers never observe a newer receipt paired with a stale live pointer.
   const writeOrder =
-    prepared.length === 2 ? [prepared[1]!, prepared[0]!] : prepared;
+    prepared.length === 2
+      ? [prepared[1]!, prepared[0]!]
+      : prepared.length === 3
+        ? [prepared[1]!, prepared[2]!, prepared[0]!]
+        : prepared;
   writePreparedArtifactsAtomically(writeOrder);
   return {
     ...primary,

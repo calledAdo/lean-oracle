@@ -11,7 +11,10 @@ import {
   writeDeploymentActionArtifacts,
   writeDeploymentArtifact,
 } from "../dist/artifacts.js";
-import { rotateGuardianSetStateCell } from "../dist/guardianSetRotate.js";
+import {
+  buildRotatedGuardianCanonicalState,
+  rotateGuardianSetStateCell,
+} from "../dist/guardianSetRotate.js";
 import { encodeGuardianSetDataBytes } from "../dist/guardianSetDeploy.js";
 
 const officialV7 = `0x${fs
@@ -37,11 +40,31 @@ const guardianSetType = {
   depType: "code",
   outPoint: { txHash: `0x${"22".repeat(32)}`, index: 0 },
 };
+const guardianSetLock = {
+  codeVersion: 2,
+  codeHash: `0x${"70".repeat(32)}`,
+  hashType: "data2",
+  depType: "code",
+  outPoint: { txHash: `0x${"71".repeat(32)}`, index: 0 },
+  script: {
+    codeHash: `0x${"70".repeat(32)}`,
+    hashType: "data2",
+    args: `0x${"72".repeat(32)}`,
+  },
+};
 const priorState = {
   kind: "deploy:guardian-set",
   mode: "broadcast",
   network: "testnet",
-  guardianSetType,
+  identityVersion: 4,
+  fullTypeHash: `0x${"73".repeat(32)}`,
+  guardianSetType: {
+    ...guardianSetType,
+    version: 4,
+    identityVersion: 4,
+    codeVersion: guardianSetType.version,
+  },
+  guardianSetLock,
   guardianSet: { setIndex: 6, quorum: 13, guardianAddresses: [] },
   deployed: {
     txHash: `0x${"33".repeat(32)}`,
@@ -50,6 +73,24 @@ const priorState = {
     capacity: "52600000000",
   },
 };
+
+test("rotation projection preserves guardian identity and bind-lock metadata", () => {
+  const canonical = buildRotatedGuardianCanonicalState({
+    priorState,
+    nextSet: { setIndex: 7, quorum: 13, guardianAddresses: [] },
+    deployed: {
+      txHash: `0x${"74".repeat(32)}`,
+      index: 0,
+      typeIdArgs: priorState.deployed.typeIdArgs,
+      capacity: 52_600_000_000n,
+    },
+  });
+  assert.equal(canonical.identityVersion, 4);
+  assert.equal(canonical.guardianSetType.version, 4);
+  assert.equal(canonical.guardianSetType.codeVersion, 2);
+  assert.deepEqual(canonical.guardianSetLock, guardianSetLock);
+  assert.equal(canonical.guardianSet.setIndex, 7);
+});
 
 test("rotation receipt advances the canonical guardian state artifact", () => {
   const root = tempRoot();
@@ -148,11 +189,7 @@ test("official gs7 VAA produces an exact dry-run transition", async () => {
             },
             cellOutput: {
               capacity: BigInt(priorState.deployed.capacity),
-              lock: ccc.Script.from({
-                codeHash: `0x${"77".repeat(32)}`,
-                hashType: "type",
-                args: "0x",
-              }),
+              lock: ccc.Script.from(guardianSetLock.script),
               type: ccc.Script.from({
                 codeHash: guardianSetType.codeHash,
                 hashType: guardianSetType.hashType,
@@ -183,6 +220,10 @@ test("official gs7 VAA produces an exact dry-run transition", async () => {
     assert.equal(result.nextSet.guardianAddresses.length, 19);
     assert.equal(result.planned.currentOutPoint.txHash, priorState.deployed.txHash);
     assert.equal(result.planned.outputCapacity, 52_600_000_000n);
+    assert.deepEqual(result.planned.lockCodeDep, {
+      outPoint: guardianSetLock.outPoint,
+      depType: guardianSetLock.depType,
+    });
     assert.match(result.planned.unsignedTransition, /^0x[0-9a-f]+$/u);
     assert.equal(
       readCodeDeploymentArtifact({

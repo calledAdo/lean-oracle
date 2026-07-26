@@ -37,4 +37,5 @@ deployment/dist/
 # Only generated local devnet artifacts are ignored; checked-in testnet/mainnet
 # artifacts under deployment/artifacts/ are intentionally tracked (see README).
 deployment/artifacts/devnet*.json
+deployment/artifacts/*.progress.json
 deployment/config/devnet.json
