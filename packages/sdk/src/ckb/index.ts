@@ -14,6 +14,7 @@ export {
   decodeGuardianSetCellDataBytes,
   decodeGuardianSetCellDataHex,
 } from "./decodeGuardianSetData.js";
+export { encodeGuardianSetCellDataBytes } from "./encodeGuardianSetData.js";
 export {
   findLatestOracleLiveCellForFeed,
 } from "./findOracleCells.js";

@@ -160,6 +160,7 @@ list at <https://www.pyth.network/developers/price-feed-ids>.
   cell data: 12-byte LE header `set_index`, `quorum`, `guardian_count`, then
   `guardian_count` × 20-byte addresses; no lifecycle timestamps)
 - `tx/` — transaction pipelines and building workflows
+- `wormhole/` — guardian upgrade VAA parsing and canonical-registry fetching
 - `presets/` — network configuration presets, CCC lock preset wiring, and
   oracle-type code-version helpers
 - `witness/` — oracle update witness encoding
@@ -195,6 +196,21 @@ import type {
 } from "lean-oracle-sdk/hermes";
 ```
 
+Guardian rotation parsing and transport live under `/wormhole`; transaction
+attachment and keeper planning remain under `/tx`:
+
+```ts
+import {
+  fetchGuardianSetUpgradeVaa,
+  parseGuardianSetUpgradeVaa,
+  wormholeQuorum,
+} from "lean-oracle-sdk/wormhole";
+import {
+  attachGuardianSetRotation,
+  buildGuardianSetRotationIfBehind,
+} from "lean-oracle-sdk/tx";
+```
+
 Lower-level helpers (witness encoders, transaction-mutation primitives,
 fee/fuel rebalancing, guardian-dep resolution, output construction) are
 **explicit subpath imports**:
@@ -218,8 +234,8 @@ import {
 } from "lean-oracle-sdk/advanced";
 ```
 
-Available subpaths: `./ckb`, `./tx`, `./fuel`, `./hermes`, `./presets`,
-`./advanced`.
+Available subpaths: `./ckb`, `./tx`, `./fuel`, `./hermes`, `./wormhole`,
+`./presets`, `./advanced`.
 
 ### Reading the latest oracle state
 
@@ -291,9 +307,13 @@ The bundled presets carry their full code-version history under
 `deployment.oracleTypeVersions` (a map keyed by version number, mirroring
 `deployment/artifacts/<network>.oracle-type.json#versions`). The latest entry
 equals `deployment.oracleType`, which is what discovery, update, deploy, and
-burn use by default — this map does **not** change default behaviour. To
-operate on a cell created under a prior code version, build a config pinned to
-that version with `leanOraclePresetForOracleVersion`:
+burn use by default — this map does **not** change default behaviour. The
+current testnet default is oracle v4. It preserves v3's zero-initialized
+creation behavior; the new code identity makes the build reproducible after
+guardian governance was added to the shared contract crate.
+
+To operate on a cell created under a prior code version, build a config pinned
+to that version with `leanOraclePresetForOracleVersion`:
 
 ```ts
 import {
@@ -313,10 +333,21 @@ history (or `undefined` for an inert preset like mainnet before launch).
 `leanOraclePresetForOracleVersion` throws a `LeanOracleSdkError` if the config
 has no version history or the requested version is absent.
 
-Upgrades to the `oracle_type` script are expected to be rare — guardian-set
-rotation happens in place via `set_index`, with no `codeHash` change — so this
-only matters when a contract fix forces a redeploy and you still hold cells
-from the prior version.
+The testnet guardian history is recorded under
+`deployment.guardianSetTypeVersions`. Canonical guardian **identity v4** has
+Type ID args
+`0xff1d70fbea716cb99b1b0b9906bf00255fe080808d07bd15352a56273a15a3d5`
+and reuses guardian **code v3**. The version increment describes the new
+singleton/lock lineage, not a new binary. Oracle code remains independently at
+**v4**; no oracle v5 was created for this guardian-lock migration.
+
+Identity v4 is locked by `deployment.guardianSetLock`, an
+OwnedTypeBindLock v2 instance. Anyone may rotate the singleton by preserving
+its exact `(lock, type)` identity and attaching a valid immediate-successor
+Wormhole `GuardianSetUpgrade` VAA. Both the lock dependency and guardian code
+dependency are attached by `attachGuardianSetRotation`. The former
+deployer-locked identity v3 singleton remains live as legacy state but is no
+longer selected by the canonical preset.
 
 ## Scripts
 
@@ -325,6 +356,8 @@ from the prior version.
 - `npm run test` — build, then run SDK fixture checks for codecs, discovery, client behavior, transaction builders, fee balancing, package boundaries, and accumulator parsing
 - `npm run test:pack` — pack the SDK, install it into a temporary consumer project, and import every advertised subpath
 - `npm run release:check` — `npm test && npm run test:pack`
+- `npm run migrate:owned-bind-guardian:testnet` — repository operator workflow
+  for the guarded, restartable identity-v4 cutover
 - `npm run prepublishOnly` — clean, then run the release check before `npm publish`
 - `npm run test:integration:devnet` — run the repository's opt-in integration tests against an already-deployed local devnet
 

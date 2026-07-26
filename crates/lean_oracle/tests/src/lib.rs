@@ -7,6 +7,8 @@ pub mod hermes_real_fixture;
 
 // Only compile this module during tests.
 #[cfg(test)]
+mod guardian_owned_bind_tests;
+#[cfg(test)]
 mod oracle_data_tests;
 #[cfg(test)]
 mod oracle_integration_tests;

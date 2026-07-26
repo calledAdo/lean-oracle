@@ -13,7 +13,7 @@
  * witness encoders) live behind their own explicit subpaths — see
  * {@link ./tx}, {@link ./fuel}, {@link ./hermes}, {@link ./presets},
  * {@link ./ckb}, and {@link ./advanced}. Witness encoders are reachable via
- * `./advanced`.
+ * `./advanced`, and `./wormhole`.
  */
 
 // ── Client ───────────────────────────────────────────────────────────────────
@@ -66,6 +66,7 @@ export {
   decodeGuardianSetCellDataBytes,
   decodeGuardianSetCellDataHex,
 } from "./ckb/decodeGuardianSetData.js";
+export { encodeGuardianSetCellDataBytes } from "./ckb/encodeGuardianSetData.js";
 
 // ── Oracle-cell discovery ────────────────────────────────────────────────────
 export { findLatestOracleLiveCellForFeed } from "./ckb/findOracleCells.js";

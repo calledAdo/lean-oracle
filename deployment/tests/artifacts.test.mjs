@@ -7,6 +7,7 @@ import path from "node:path";
 import {
   codeArtifactPath,
   readCodeDeploymentArtifact,
+  writeDeploymentActionArtifacts,
   writeDeploymentArtifact,
 } from "../dist/artifacts.js";
 
@@ -172,6 +173,34 @@ test("writeDeploymentArtifact serializes BigInt values as strings", () => {
     const raw = fs.readFileSync(artifactPath, "utf8");
     assert.ok(raw.includes('"capacity": "12345678901"'));
     assert.ok(raw.includes('"index": "7"'));
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("dry-run actions leave existing artifacts byte-identical", () => {
+  const root = tempRoot();
+  try {
+    const existing = writeDeploymentArtifact(
+      root,
+      "testnet",
+      "rotate:guardian-set",
+      { mode: "broadcast", deployed: { txHash: `0x${"11".repeat(32)}` } },
+    );
+    const before = fs.readFileSync(existing.artifactPath);
+
+    const result = writeDeploymentActionArtifacts(
+      root,
+      "testnet",
+      "rotate:guardian-set",
+      {
+        mode: "dry-run",
+        planned: { currentOutPoint: { txHash: `0x${"22".repeat(32)}`, index: 0 } },
+      },
+    );
+
+    assert.deepEqual(result.artifactPaths, []);
+    assert.deepEqual(fs.readFileSync(existing.artifactPath), before);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

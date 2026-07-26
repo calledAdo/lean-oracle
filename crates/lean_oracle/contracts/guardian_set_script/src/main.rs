@@ -1,13 +1,19 @@
 //! This file contains the guardian-set type script entrypoint.
 //!
 //! Its job is intentionally narrow:
-//! - allow creation of well-formed guardian-set cells
-//! - allow in-place rotation (forward set-index moves)
+//! - allow creation of well-formed guardian-set cells (trusted genesis)
+//! - allow **trustless** in-place rotation (forward set-index moves) authorized
+//!   by a Wormhole guardian-set-upgrade governance VAA
 //! - reject backwards or same-index set-index moves
 //! - enforce canonical Type ID-based singleton identity
 //! - enforce singleton script-group shape
 //!
-//! Governance authority for rotations is modeled by the cell's lock script.
+//! **Trustless rotation**: a guardian-set upgrade is a governance VAA (module
+//! `Core`, action `GuardianSetUpgrade`) signed by a quorum of the *current* set.
+//! Because the cell already stores the current set, it can verify its own
+//! successor. Rotation authority therefore lives in the *type script*, not the
+//! lock — the lock may be permissionless, and anyone can land the rotation once
+//! Wormhole publishes the upgrade VAA. See `common::governance`.
 //!
 //! **Current-set-only policy**: guardian-set lifecycle fields (creation_time,
 //! expiration_time) are not stored. This fork does not implement Wormhole's
@@ -20,7 +26,9 @@
 // normal Rust `main`.
 #![cfg_attr(not(test), no_main)]
 
-// During host tests we still want access to `alloc`.
+// During host tests we still want access to `alloc`. In contract builds the
+// `ckb_std::entry!` macro brings `alloc` into scope, which the update path uses
+// to buffer the governance VAA witness.
 #[cfg(test)]
 extern crate alloc;
 
@@ -42,10 +50,17 @@ default_alloc!(16384, 1258306, 64);
 use ckb_std::{
     ckb_constants::Source,
     ckb_types::prelude::*,
-    high_level::{load_cell_data, load_cell_type, load_input, load_script, QueryIter},
+    high_level::{
+        load_cell_data, load_cell_type, load_input, load_script, load_witness_args, QueryIter,
+    },
 };
-// Import shared errors and guardian-set decoding.
-use lean_oracle_common::{errors::*, guardian_set::GuardianSetData};
+// Import shared errors, guardian-set decoding, and trustless-rotation logic.
+use lean_oracle_common::{
+    errors::*,
+    governance::{verify_guardian_set_upgrade, RotationError},
+    guardian_set::GuardianSetData,
+    wormhole_verify::VerifyError,
+};
 
 // CKB entrypoint. Return `0` on success or an `i8` error code on failure.
 pub fn program_entry() -> i8 {
@@ -185,8 +200,10 @@ fn validate_update() -> i8 {
 
     // Require strict forward rotation for in-place updates.
     //
-    // Disallowing same-index mutation ensures that every legitimate signer
-    // rotation is visible as a set-index increment.
+    // Disallowing same-index (or backward) mutation ensures that every
+    // legitimate signer rotation is visible as a set-index increment. The exact
+    // "+1" step is re-checked cryptographically below, but rejecting non-forward
+    // moves up front gives a clearer error and keeps parity with prior behavior.
     if new.set_index <= old.set_index {
         return ERROR_GUARDIAN_SET_CONTINUITY;
     }
@@ -196,7 +213,43 @@ fn validate_update() -> i8 {
         return ERROR_GUARDIAN_SET_MALFORMED;
     }
 
-    // Mutation is allowed if the set_index moves forward.
-    // Authorization is assumed to be handled by the cell's lock script.
-    0
+    // Trustless authorization: the rotation must be endorsed by a Wormhole
+    // guardian-set-upgrade governance VAA signed by the *current* on-chain set.
+    // The VAA is carried in the group input's WitnessArgs `input_type` field
+    // (the same slot the oracle uses for its update witness).
+    let governance_vaa = match load_rotation_vaa() {
+        Ok(bytes) => bytes,
+        Err(code) => return code,
+    };
+
+    match verify_guardian_set_upgrade(&old, &new, &governance_vaa) {
+        Ok(()) => 0,
+        Err(e) => rotation_error_code(e),
+    }
+}
+
+// Load the guardian-set-upgrade governance VAA from the group input's witness.
+fn load_rotation_vaa() -> Result<alloc::vec::Vec<u8>, i8> {
+    let witness_args = load_witness_args(0, Source::GroupInput).map_err(|_| ERROR_SYSCALL)?;
+    let input_type = witness_args
+        .input_type()
+        .to_opt()
+        .ok_or(ERROR_GOVERNANCE_VAA_MALFORMED)?
+        .raw_data();
+    Ok(input_type.to_vec())
+}
+
+// Map a `RotationError` to its canonical `i8` status code.
+fn rotation_error_code(e: RotationError) -> i8 {
+    match e {
+        RotationError::VaaMalformed => ERROR_GOVERNANCE_VAA_MALFORMED,
+        RotationError::EmitterMismatch => ERROR_GOVERNANCE_EMITTER_MISMATCH,
+        RotationError::ActionInvalid => ERROR_GOVERNANCE_ACTION_INVALID,
+        RotationError::IndexMismatch => ERROR_ROTATION_INDEX_MISMATCH,
+        RotationError::SetMismatch => ERROR_ROTATION_SET_MISMATCH,
+        RotationError::QuorumMismatch => ERROR_ROTATION_QUORUM_MISMATCH,
+        RotationError::Verify(VerifyError::Quorum) => ERROR_GUARDIAN_QUORUM_NOT_MET,
+        RotationError::Verify(VerifyError::Order) => ERROR_GUARDIAN_SIGNATURE_ORDER,
+        RotationError::Verify(VerifyError::Signature) => ERROR_GUARDIAN_SIGNATURE_INVALID,
+    }
 }

@@ -4,10 +4,39 @@ import type {
   DeploymentAction,
   DeploymentContext,
 } from "./types.js";
-import { deployCodeScript } from "./codeDeploy.js";
+import {
+  deployCodeScript,
+  verifyCodeDeploymentCandidate,
+} from "./codeDeploy.js";
 import { readCodeDeploymentArtifact } from "./artifacts.js";
 import { deployGuardianSetStateCell } from "./guardianSetDeploy.js";
+import { rotateGuardianSetStateCell } from "./guardianSetRotate.js";
 import { deployOracleStateCell } from "./oracleDeploy.js";
+
+const CHAIN_MUTATING_ACTIONS = new Set<DeploymentAction>([
+  "deploy:guardian-set-type",
+  "deploy:oracle-type",
+  "deploy:owned-type-bind-lock",
+  "deploy:guardian-set",
+  "deploy:guardian-set-candidate",
+  "rotate:guardian-set",
+  "deploy:oracle",
+]);
+
+export function assertChainBroadcastAuthorized(ctx: {
+  action: DeploymentAction;
+  env: Pick<DeploymentContext["env"], "dryRun" | "broadcast">;
+}): void {
+  if (
+    CHAIN_MUTATING_ACTIONS.has(ctx.action) &&
+    ctx.env.dryRun === "false" &&
+    ctx.env.broadcast !== "true"
+  ) {
+    throw new Error(
+      "Refusing chain broadcast: set both DRY_RUN=false and BROADCAST=true",
+    );
+  }
+}
 
 function requireOracleOverride(ctx: {
   env: {
@@ -33,6 +62,7 @@ export async function runDeploymentAction(
     "action" | "network" | "config" | "env" | "paths"
   >,
 ): Promise<unknown> {
+  assertChainBroadcastAuthorized(ctx);
   const mode = ctx.env.dryRun !== "false" ? "dry-run" : "broadcast-pending";
 
   function codeDeploymentPayload(
@@ -80,16 +110,23 @@ export async function runDeploymentAction(
       return promoteCodeDeployment(ctx, "owned-type-bind-lock");
     case "deploy:guardian-set":
       return deployGuardianSetStateCell({ ctx });
+    case "deploy:guardian-set-candidate":
+      return deployGuardianSetStateCell({ ctx, candidate: true });
+    case "rotate:guardian-set":
+      return rotateGuardianSetStateCell({ ctx });
     case "deploy:oracle":
       requireOracleOverride(ctx);
       return deployOracleStateCell({ ctx });
   }
 }
 
-function promoteCodeDeployment(
-  ctx: Pick<DeploymentContext, "paths" | "network">,
+async function promoteCodeDeployment(
+  ctx: Pick<
+    DeploymentContext,
+    "network" | "config" | "env" | "paths"
+  >,
   scriptFamily: CodeDeploymentScriptFamily,
-): CodeDeploymentArtifact {
+): Promise<CodeDeploymentArtifact> {
   const existing = readCodeDeploymentArtifact({
     deploymentRoot: ctx.paths.deploymentRoot,
     network: ctx.network,
@@ -107,6 +144,12 @@ function promoteCodeDeployment(
       `No latestCandidate to promote for ${ctx.network}.${scriptFamily}`,
     );
   }
+
+  await verifyCodeDeploymentCandidate({
+    ctx,
+    scriptFamily,
+    candidate: artifact.latestCandidate,
+  });
 
   const versions = artifact.versions ?? {};
   const existingVersions = Object.keys(versions)

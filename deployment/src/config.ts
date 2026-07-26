@@ -17,6 +17,8 @@ const ACTIONS: DeploymentAction[] = [
   "deploy:oracle-type",
   "deploy:owned-type-bind-lock",
   "deploy:guardian-set",
+  "deploy:guardian-set-candidate",
+  "rotate:guardian-set",
   "deploy:oracle",
   "promote:guardian-set-type",
   "promote:oracle-type",
@@ -91,6 +93,8 @@ export function loadDeploymentContext(argv: string[]): DeploymentContext {
     oracleFeedId: process.env.ORACLE_FEED_ID ?? "",
     oracleEmitterChain: process.env.ORACLE_EMITTER_CHAIN ?? "",
     oracleEmitterAddress: process.env.ORACLE_EMITTER_ADDRESS ?? "",
+    guardianUpgradeVaa: process.env.GUARDIAN_UPGRADE_VAA ?? "",
+    guardianSetTypeIdArgs: process.env.GUARDIAN_SET_TYPE_ID_ARGS ?? "",
   };
 
   return {

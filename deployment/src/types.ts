@@ -5,6 +5,9 @@ export type DeploymentAction =
   | "deploy:oracle-type"
   | "deploy:owned-type-bind-lock"
   | "deploy:guardian-set"
+  | "deploy:guardian-set-candidate"
+  | "rotate:guardian-set"
+  | "migrate:owned-bind-guardian"
   | "deploy:oracle"
   | "promote:guardian-set-type"
   | "promote:oracle-type"
@@ -28,6 +31,8 @@ export interface NetworkDeploymentConfig {
   network: DeploymentNetwork;
   build: BuildConfig;
   guardianSet: GuardianSetConfig;
+  guardianSetIdentityVersion?: number;
+  guardianSetLock?: "deployer" | "owned-type-bind";
 }
 
 /** Resolved operator env (required RPC/key + optional overrides). */
@@ -44,6 +49,10 @@ export interface DeploymentEnv {
   oracleFeedId: string;
   oracleEmitterChain: string;
   oracleEmitterAddress: string;
+  /** Hex guardian-set-upgrade governance VAA authorizing `rotate:guardian-set`. */
+  guardianUpgradeVaa: string;
+  /** Optional override for the guardian-set cell's Type ID args (else read from artifact). */
+  guardianSetTypeIdArgs: string;
 }
 
 export interface DeploymentPaths {
@@ -87,6 +96,8 @@ export interface CodeDeploymentCandidate {
   depType: "code";
   /** Capacity locked in the deployed code cell, in shannons. */
   capacity?: bigint;
+  /** Type ID args protecting the code cell from plain-capacity selection. */
+  typeIdArgs?: string;
   txHash?: string;
   index?: number;
 }

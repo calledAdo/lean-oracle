@@ -2,7 +2,7 @@ import "dotenv/config";
 
 import { buildContracts } from "./build.js";
 import { loadDeploymentContext } from "./config.js";
-import { writeDeploymentArtifact } from "./artifacts.js";
+import { writeDeploymentActionArtifacts } from "./artifacts.js";
 import { runDeploymentAction } from "./deploy.js";
 import { validateConfigPreflight } from "./validate.js";
 
@@ -28,11 +28,22 @@ if (ctx.action === "validate:config") {
     await buildContracts(ctx);
   }
   const result = await runDeploymentAction(ctx);
-  const { artifactPath } = writeDeploymentArtifact(
+  const { artifactPaths } = writeDeploymentActionArtifacts(
     ctx.paths.deploymentRoot,
     ctx.network,
     ctx.action,
     result,
   );
-  console.log(`Wrote deployment artifact: ${artifactPath}`);
+  for (const artifactPath of artifactPaths) {
+    console.log(`Wrote deployment artifact: ${artifactPath}`);
+  }
+  if (artifactPaths.length === 0) {
+    console.log(
+      JSON.stringify(
+        result,
+        (_key, value) => (typeof value === "bigint" ? value.toString() : value),
+        2,
+      ),
+    );
+  }
 }

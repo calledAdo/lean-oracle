@@ -1,9 +1,9 @@
 import { ccc } from "@ckb-ccc/core";
 
 import { createCccClient, createPrivateKeySigner } from "./ccc.js";
-import { readCodeDeploymentArtifact } from "./artifacts.js";
+import { loadLatestCanonicalCodeVersion } from "./codeVersions.js";
+import { waitForCommittedTransaction } from "./chainFinality.js";
 import type {
-  CodeDeploymentArtifact,
   CodeDeploymentVersionRecord,
   DeploymentContext,
   DeploymentNetwork,
@@ -41,41 +41,115 @@ function encodeGuardianSetData(cfg: GuardianSetConfig): Uint8Array {
   return out;
 }
 
-function selectLatestCanonicalVersion(versions: Record<number, CodeDeploymentVersionRecord>): CodeDeploymentVersionRecord {
-  const keys = Object.keys(versions)
-    .map((k) => Number(k))
-    .filter((n) => Number.isFinite(n) && n >= 0);
-  if (keys.length === 0) {
-    throw new Error("No canonical versions present in guardian-set-type artifact");
-  }
-  const max = Math.max(...keys);
-  const record = versions[max];
-  if (!record) throw new Error("Failed to resolve selected canonical version record");
-  return record;
+export function encodeGuardianSetDataBytes(cfg: GuardianSetConfig): Uint8Array {
+  return encodeGuardianSetData(cfg);
 }
 
-function loadGuardianSetTypeVersion(params: {
+export function loadGuardianSetTypeVersion(params: {
   deploymentRoot: string;
   network: DeploymentNetwork;
 }): CodeDeploymentVersionRecord {
-  const env = readCodeDeploymentArtifact({
+  return loadLatestCanonicalCodeVersion({
     deploymentRoot: params.deploymentRoot,
     network: params.network,
     scriptFamily: "guardian-set-type",
   });
-  const deployment = env?.deployment;
-  if (!deployment || typeof deployment !== "object") {
-    throw new Error(`Missing guardian-set-type code deployment artifact for ${params.network}`);
+}
+
+export function buildGuardianSetCandidateTemplate(params: {
+  identityVersion: number;
+  guardianCode: CodeDeploymentVersionRecord;
+  bindLockCode: CodeDeploymentVersionRecord;
+  deployerLock: ccc.Script;
+  guardianSet: GuardianSetConfig;
+}) {
+  const guardianHashType = params.guardianCode.hashType;
+  const bindLockHashType = params.bindLockCode.hashType;
+  if (!params.guardianCode.txHash || params.guardianCode.index === undefined) {
+    throw new Error("Guardian code version is missing its code-dependency outpoint");
   }
-  const artifact = deployment as CodeDeploymentArtifact;
-  if (!artifact.versions) {
-    throw new Error("guardian-set-type artifact missing versions");
+  if (!params.bindLockCode.txHash || params.bindLockCode.index === undefined) {
+    throw new Error("OwnedTypeBindLock version is missing its code-dependency outpoint");
   }
-  return selectLatestCanonicalVersion(artifact.versions as Record<number, CodeDeploymentVersionRecord>);
+
+  const guardianType = ccc.Script.from({
+    codeHash: params.guardianCode.codeHash,
+    hashType: guardianHashType,
+    args: `0x${"00".repeat(32)}`,
+  });
+  const guardianLock = ccc.Script.from({
+    codeHash: params.bindLockCode.codeHash,
+    hashType: bindLockHashType,
+    args: ccc.hashCkb(params.deployerLock.toBytes()),
+  });
+
+  return {
+    identityVersion: params.identityVersion,
+    guardianSetType: {
+      codeVersion: params.guardianCode.version,
+      codeHash: params.guardianCode.codeHash,
+      hashType: guardianHashType,
+      depType: params.guardianCode.depType,
+      codeDep: {
+        outPoint: {
+          txHash: params.guardianCode.txHash,
+          index: params.guardianCode.index,
+        },
+        depType: params.guardianCode.depType,
+      },
+      script: guardianType,
+    },
+    guardianSetLock: {
+      codeVersion: params.bindLockCode.version,
+      codeHash: params.bindLockCode.codeHash,
+      hashType: bindLockHashType,
+      depType: params.bindLockCode.depType,
+      codeDep: {
+        outPoint: {
+          txHash: params.bindLockCode.txHash,
+          index: params.bindLockCode.index,
+        },
+        depType: params.bindLockCode.depType,
+      },
+      script: guardianLock,
+    },
+    guardianSet: params.guardianSet,
+    guardianSetData: encodeGuardianSetData(params.guardianSet),
+  };
+}
+
+export function assertGuardianSetCandidateReadback(params: {
+  expected: {
+    cellOutput: { capacity: bigint; lock: ccc.Script; type?: ccc.Script };
+    outputData: ccc.Hex;
+  };
+  liveCell: {
+    cellOutput: { capacity: bigint; lock: ccc.Script; type?: ccc.Script };
+    outputData: ccc.Hex;
+  };
+}): void {
+  const { expected, liveCell } = params;
+  if (!liveCell.cellOutput.lock.eq(expected.cellOutput.lock)) {
+    throw new Error("Guardian candidate readback lock mismatch");
+  }
+  if (
+    !liveCell.cellOutput.type ||
+    !expected.cellOutput.type ||
+    !liveCell.cellOutput.type.eq(expected.cellOutput.type)
+  ) {
+    throw new Error("Guardian candidate readback type mismatch");
+  }
+  if (liveCell.cellOutput.capacity !== expected.cellOutput.capacity) {
+    throw new Error("Guardian candidate readback capacity mismatch");
+  }
+  if (ccc.hexFrom(liveCell.outputData) !== ccc.hexFrom(expected.outputData)) {
+    throw new Error("Guardian candidate readback data mismatch");
+  }
 }
 
 export async function deployGuardianSetStateCell(params: {
   ctx: Pick<DeploymentContext, "network" | "config" | "env" | "paths">;
+  candidate?: boolean;
 }): Promise<unknown> {
   const { ctx } = params;
   const dryRun = ctx.env.dryRun !== "false";
@@ -94,19 +168,47 @@ export async function deployGuardianSetStateCell(params: {
 
   // Validate guardian set config and encode output data.
   const guardianSetData = encodeGuardianSetData(ctx.config.guardianSet);
+  const identityVersion = params.candidate
+    ? ctx.config.guardianSetIdentityVersion
+    : gsTypeVersion.version;
+  if (params.candidate && (!Number.isInteger(identityVersion) || Number(identityVersion) <= 0)) {
+    throw new Error("Guardian candidate requires a positive guardianSetIdentityVersion");
+  }
+  const bindLockVersion = params.candidate
+    ? loadLatestCanonicalCodeVersion({
+        deploymentRoot: ctx.paths.deploymentRoot,
+        network: ctx.network,
+        scriptFamily: "owned-type-bind-lock",
+      })
+    : undefined;
+  if (params.candidate && ctx.config.guardianSetLock !== "owned-type-bind") {
+    throw new Error("Guardian candidate requires guardianSetLock=owned-type-bind");
+  }
 
   // If dry-run, do not require a live RPC endpoint.
   if (dryRun) {
     return {
-      kind: "deploy:guardian-set",
+      kind: params.candidate
+        ? "deploy:guardian-set-candidate"
+        : "deploy:guardian-set",
       mode: "dry-run",
       network: ctx.network,
+      identityVersion,
       guardianSetType: {
         version: gsTypeVersion.version,
+        codeVersion: gsTypeVersion.version,
         codeHash: gsTypeVersion.codeHash,
         hashType: gsTypeHashType,
         depType: gsTypeVersion.depType,
       },
+      guardianSetLock: bindLockVersion
+        ? {
+            codeVersion: bindLockVersion.version,
+            codeHash: bindLockVersion.codeHash,
+            hashType: bindLockVersion.hashType,
+            depType: bindLockVersion.depType,
+          }
+        : { kind: "deployer" },
       guardianSet: ctx.config.guardianSet,
       planned: {
         outputDataLen: guardianSetData.length,
@@ -126,13 +228,22 @@ export async function deployGuardianSetStateCell(params: {
   const client = createCccClient(ctx.network, ctx.env.rpcUrl, ctx.env);
   const signer = createPrivateKeySigner(client, ctx.env.deployerPrivateKey);
 
-  const { script: lock } = await signer.getRecommendedAddressObj();
-
-  const type = {
+  const { script: deployerLock } = await signer.getRecommendedAddressObj();
+  const template = bindLockVersion
+    ? buildGuardianSetCandidateTemplate({
+        identityVersion: Number(identityVersion),
+        guardianCode: gsTypeVersion,
+        bindLockCode: bindLockVersion,
+        deployerLock,
+        guardianSet: ctx.config.guardianSet,
+      })
+    : undefined;
+  const lock = template?.guardianSetLock.script ?? deployerLock;
+  const type = template?.guardianSetType.script ?? ccc.Script.from({
     codeHash: gsTypeVersion.codeHash,
     hashType: gsTypeHashType,
-    args: "0x" + "00".repeat(32),
-  };
+    args: `0x${"00".repeat(32)}`,
+  });
 
   const tx = ccc.Transaction.from({
     outputs: [
@@ -166,23 +277,71 @@ export async function deployGuardianSetStateCell(params: {
   await tx.completeFeeBy(signer, ctx.network === "devnet" ? 1000n : undefined);
 
   const txHash = await signer.sendTransaction(tx);
+  const committed = await waitForCommittedTransaction(client, txHash, {
+    operation: params.candidate ? "guardian candidate" : "guardian deployment",
+  });
+  const liveCell = await client.getCellLive({ txHash, index: 0n }, true, true);
+  if (!liveCell) {
+    throw new Error("Guardian deployment committed without a live output at index 0");
+  }
+  assertGuardianSetCandidateReadback({
+    expected: {
+      cellOutput: tx.outputs[0],
+      outputData: tx.outputsData[0],
+    },
+    liveCell,
+  });
+
+  const typeIdArgs = tx.outputs[0].type!.args;
+  const fullTypeHash = ccc.hashCkb(tx.outputs[0].type!.toBytes());
 
   return {
-    kind: "deploy:guardian-set",
+    kind: params.candidate
+      ? "deploy:guardian-set-candidate"
+      : "deploy:guardian-set",
     mode: "broadcast",
     network: ctx.network,
+    identityVersion,
+    fullTypeHash,
+    verifiedAtBlock: committed.blockNumber?.toString(),
     guardianSetType: {
       version: gsTypeVersion.version,
+      codeVersion: gsTypeVersion.version,
       codeHash: gsTypeVersion.codeHash,
       hashType: gsTypeHashType,
       depType: gsTypeVersion.depType,
       outPoint: { txHash: gsTypeVersion.txHash, index: gsTypeVersion.index },
+      args: typeIdArgs,
     },
+    guardianSetLock: bindLockVersion
+      ? {
+          codeVersion: bindLockVersion.version,
+          codeHash: bindLockVersion.codeHash,
+          hashType: bindLockVersion.hashType,
+          depType: bindLockVersion.depType,
+          outPoint: {
+            txHash: bindLockVersion.txHash,
+            index: bindLockVersion.index,
+          },
+          script: {
+            codeHash: lock.codeHash,
+            hashType: lock.hashType,
+            args: lock.args,
+          },
+        }
+      : {
+          kind: "deployer",
+          script: {
+            codeHash: lock.codeHash,
+            hashType: lock.hashType,
+            args: lock.args,
+          },
+        },
     guardianSet: ctx.config.guardianSet,
     deployed: {
       txHash,
       index: 0,
-      typeIdArgs: tx.outputs[0].type!.args,
+      typeIdArgs,
       capacity: tx.outputs[0].capacity,
     },
   };

@@ -1,7 +1,7 @@
 {
   "network": "testnet",
   "action": "promote:owned-type-bind-lock",
-  "generatedAt": "2026-05-11T14:06:04.068Z",
+  "generatedAt": "2026-07-26T10:23:31.235Z",
   "deployment": {
     "scriptFamily": "owned-type-bind-lock",
     "versions": {
@@ -15,6 +15,18 @@
         "capacity": "1772500000000",
         "version": 1,
         "promotedAt": "2026-05-11T14:06:04.068Z"
+      },
+      "2": {
+        "mode": "broadcast",
+        "codeHash": "0x5554bc20c9f3dbb8d1d7a6591b1b2ceeb0bbee822804635ee168911a440a111c",
+        "hashType": "data2",
+        "depType": "code",
+        "txHash": "0xff625007fa8ba4ffbbaa97eb57fe70228228655a1fd72acb69e9abfbd1c4e065",
+        "index": 0,
+        "capacity": "1779000000000",
+        "typeIdArgs": "0xa96c66da38d53c84f3adbd28e12c411298d0519cde429da339b0a329c62d4e88",
+        "version": 2,
+        "promotedAt": "2026-07-26T10:23:31.235Z"
       }
     }
   }

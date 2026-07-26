@@ -1,6 +1,6 @@
 {
   "name": "lean-oracle-sdk",
-  "version": "0.2.0",
+  "version": "0.3.1",
   "description": "TypeScript SDK for the Lean Oracle on CKB testnet.",
   "license": "MIT",
   "author": "calledAdo <destinyadokiye8@gmail.com>",
@@ -48,6 +48,10 @@
       "types": "./dist/hermes/index.d.ts",
       "import": "./dist/hermes/index.js"
     },
+    "./wormhole": {
+      "types": "./dist/wormhole/index.d.ts",
+      "import": "./dist/wormhole/index.js"
+    },
     "./presets": {
       "types": "./dist/presets/index.d.ts",
       "import": "./dist/presets/index.js"
@@ -65,11 +69,13 @@
   ],
   "scripts": {
     "build": "tsc -p .",
+    "test:types": "tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --skipLibCheck tests/guardianIdentityTypes.compile.ts",
     "clean": "rimraf dist",
     "prepublishOnly": "npm run clean && npm run release:check",
-    "test": "npm run build && node tests/decodeGuardianSetData.fixture.mjs && node tests/decodeOracleData.fixture.mjs && node tests/encodeOracleData.fixture.mjs && node tests/witnessEncoding.fixture.mjs && node tests/hermesUrls.fixture.mjs && node tests/findLatestOracleLiveCellForFeed.fixture.mjs && node tests/guardianDep.fixture.mjs && node tests/rebalanceFees.fixture.mjs && node tests/txBuilders.fixture.mjs && node tests/clientCccInjection.fixture.mjs && node tests/getOracleCellState.fixture.mjs && node tests/parseAccumulator.fixture.mjs && node tests/hermesTransportError.fixture.mjs && node tests/feedCatalog.fixture.mjs && node tests/oracleVersionPreset.fixture.mjs && node tests/rootApiBoundary.fixture.mjs",
+    "test": "npm run build && npm run test:types && node tests/decodeGuardianSetData.fixture.mjs && node tests/decodeOracleData.fixture.mjs && node tests/encodeOracleData.fixture.mjs && node tests/witnessEncoding.fixture.mjs && node tests/hermesUrls.fixture.mjs && node tests/findLatestOracleLiveCellForFeed.fixture.mjs && node tests/guardianDep.fixture.mjs && node tests/rebalanceFees.fixture.mjs && node tests/txBuilders.fixture.mjs && node tests/clientCccInjection.fixture.mjs && node tests/getOracleCellState.fixture.mjs && node tests/parseAccumulator.fixture.mjs && node tests/hermesTransportError.fixture.mjs && node tests/feedCatalog.fixture.mjs && node tests/oracleVersionPreset.fixture.mjs && node tests/rootApiBoundary.fixture.mjs && node tests/guardianSetUpgradeVaa.fixture.mjs && node tests/guardianSetUpgradeFetcher.fixture.mjs && node tests/guardianSetRotation.fixture.mjs",
     "test:pack": "npm run build && node tests/tarballExports.fixture.mjs",
     "release:check": "npm test && npm run test:pack",
+    "migrate:owned-bind-guardian:testnet": "npm run build && npm --prefix ../../deployment run build && node --env-file=../../deployment/.env scripts/migrate-owned-bind-guardian-testnet.mjs",
     "test:integration:devnet": "npm run build && npm --prefix ../../deployment run build && node --env-file=.env tests/integration/devnet/sdk-devnet.test.mjs && node --env-file=.env tests/integration/devnet/sdk-devnet-deploy-burn.test.mjs && node --env-file=.env tests/integration/devnet/sdk-devnet-negative.test.mjs && node --env-file=.env tests/integration/devnet/sdk-devnet-versioning.test.mjs"
   },
   "dependencies": {

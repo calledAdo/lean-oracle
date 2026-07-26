@@ -23,6 +23,15 @@ const versions = leanOracleTestnetPreset.deployment.oracleTypeVersions;
 assert.ok(versions, "testnet preset must carry oracleTypeVersions");
 const latestKey = leanOracleLatestOracleVersion(leanOracleTestnetPreset);
 assert.equal(typeof latestKey, "number");
+assert.equal(latestKey, 4, "oracle v4 must be the canonical reproducible build");
+assert.equal(
+  versions[latestKey].codeHash,
+  "0x5711c27408e948befdf55cdebf29b6ed0b6c56d8866200dab1dd53f28bef8c55",
+);
+assert.equal(
+  versions[latestKey].codeDep.outPoint.txHash,
+  "0x797167087bce4fa6b5bb1b6620f4e52bdad86bff28de159a732db0f82440131d",
+);
 assert.deepEqual(
   versions[latestKey].codeHash,
   leanOracleTestnetPreset.deployment.oracleType.codeHash,
@@ -33,6 +42,69 @@ assert.deepEqual(
   leanOracleTestnetPreset.deployment.oracleType.codeDep,
 );
 console.log(`${FILE}: testnet history shape PASS`);
+
+// Guardian identity v4 reuses code v3 under a permissionless continuity lock.
+// Identity v3 remains available for inspection of the live legacy singleton.
+const guardianVersions =
+  leanOracleTestnetPreset.deployment.guardianSetTypeVersions;
+assert.ok(guardianVersions, "testnet preset must carry guardianSetTypeVersions");
+assert.deepEqual(
+  guardianVersions[4],
+  leanOracleTestnetPreset.deployment.guardianSetType,
+  "guardian identity v4 entry must equal the canonical guardianSetType",
+);
+assert.equal(
+  guardianVersions[1].codeHash,
+  "0x57bddf3d57ea45c88ab68d0de706bbaecd68895fd6062b099626deb157100119",
+);
+assert.equal(
+  guardianVersions[4].codeHash,
+  "0x7ab8c7d225c0e74ecb01b58f8c7a13e298df08460d0947b776b2e47cd5525782",
+);
+assert.equal(
+  guardianVersions[4].args,
+  "0xff1d70fbea716cb99b1b0b9906bf00255fe080808d07bd15352a56273a15a3d5",
+);
+assert.equal(guardianVersions[4].identityVersion, 4);
+assert.equal(guardianVersions[4].codeVersion, 3);
+assert.deepEqual(guardianVersions[4].codeDep, {
+  outPoint: {
+    txHash:
+      "0x0903144bfb3a736d1a989783d0e6304c153bb5b7627b64843e73e9b2f58f42b9",
+    index: 0n,
+  },
+  depType: "code",
+});
+assert.equal(
+  guardianVersions[3].args,
+  "0x4767b1c0444b9206234622869b1205d1acac2b492c34c52e59af14278002a734",
+  "guardian identity v3 must retain the legacy singleton Type ID args",
+);
+assert.deepEqual(leanOracleTestnetPreset.deployment.guardianSetLock, {
+  script: {
+    codeHash:
+      "0x5554bc20c9f3dbb8d1d7a6591b1b2ceeb0bbee822804635ee168911a440a111c",
+    hashType: "data2",
+    args: "0x7de82d61a7eb2ec82b0dc653e558ba120efcbfbb44dac87c12972d05bf250653",
+  },
+  codeDep: {
+    outPoint: {
+      txHash:
+        "0xff625007fa8ba4ffbbaa97eb57fe70228228655a1fd72acb69e9abfbd1c4e065",
+      index: 0n,
+    },
+    depType: "code",
+  },
+});
+console.log(`${FILE}: guardian history shape PASS`);
+
+assert.equal(
+  leanOracleTestnetPreset.deployment.defaultPublicOracleLock.codeDep.outPoint
+    .txHash,
+  "0xff625007fa8ba4ffbbaa97eb57fe70228228655a1fd72acb69e9abfbd1c4e065",
+  "default public lock must reference the live Type ID-protected code cell",
+);
+console.log(`${FILE}: public lock dep liveness PASS`);
 
 // ── ② There is at least one older version distinct from latest
 const olderKeys = Object.keys(versions)

@@ -1,0 +1,71 @@
+{
+  "network": "testnet",
+  "action": "deploy:guardian-set-candidate",
+  "generatedAt": "2026-07-26T20:15:28.575Z",
+  "deployment": {
+    "kind": "deploy:guardian-set-candidate",
+    "mode": "broadcast",
+    "network": "testnet",
+    "identityVersion": 4,
+    "fullTypeHash": "0xf952c3b4f0019c20eb9b1b4049e05df4e4bddad5700238251d9504f4303bd476",
+    "verifiedAtBlock": "21879293",
+    "guardianSetType": {
+      "version": 3,
+      "codeVersion": 3,
+      "codeHash": "0x7ab8c7d225c0e74ecb01b58f8c7a13e298df08460d0947b776b2e47cd5525782",
+      "hashType": "data2",
+      "depType": "code",
+      "outPoint": {
+        "txHash": "0x0903144bfb3a736d1a989783d0e6304c153bb5b7627b64843e73e9b2f58f42b9",
+        "index": 0
+      },
+      "args": "0xff1d70fbea716cb99b1b0b9906bf00255fe080808d07bd15352a56273a15a3d5"
+    },
+    "guardianSetLock": {
+      "codeVersion": 2,
+      "codeHash": "0x5554bc20c9f3dbb8d1d7a6591b1b2ceeb0bbee822804635ee168911a440a111c",
+      "hashType": "data2",
+      "depType": "code",
+      "outPoint": {
+        "txHash": "0xff625007fa8ba4ffbbaa97eb57fe70228228655a1fd72acb69e9abfbd1c4e065",
+        "index": 0
+      },
+      "script": {
+        "codeHash": "0x5554bc20c9f3dbb8d1d7a6591b1b2ceeb0bbee822804635ee168911a440a111c",
+        "hashType": "data2",
+        "args": "0x7de82d61a7eb2ec82b0dc653e558ba120efcbfbb44dac87c12972d05bf250653"
+      }
+    },
+    "guardianSet": {
+      "setIndex": 7,
+      "quorum": 13,
+      "guardianAddresses": [
+        "0x5893B5A76c3f739645648885bDCcC06cd70a3Cd3",
+        "0xfF6CB952589BDE862c25Ef4392132fb9D4A42157",
+        "0x114De8460193bdf3A2fCf81f86a09765F4762fD1",
+        "0x107A0086b32d7A0977926A205131d8731D39cbEB",
+        "0x8C82B2fd82FaeD2711d59AF0F2499D16e726f6b2",
+        "0x42579bFFbCF4276E290aB8E4C162bd4052b97970",
+        "0x938f104AEb5581293216ce97d771e0CB721221B1",
+        "0xf3ea0ad4ffb5a178ae4ebc21861651b25bdcbb91",
+        "0x9D16870160e703324D057c3361c34C5beFBa2c34",
+        "0x000aC0076727b35FBea2dAc28fEE5cCB0fEA768e",
+        "0xAF45Ced136b9D9e24903464AE889F5C8a723FC14",
+        "0xf93124b7c738843CBB89E864c862c38cddCccF95",
+        "0xD2CC37A4dc036a8D232b48f62cDD4731412f4890",
+        "0xDA798F6896A3331F64b48c12D1D57Fd9cbe70811",
+        "0xae565927bb8db25cd8bf3e7bb663d70023e4ea78",
+        "0x3F851Ad586A47ceF8d04748f33ab0D71395f06b4",
+        "0x178e21ad2E77AE06711549CFBB1f9c7a9d8096e8",
+        "0x7899cEAB1DC961Dae9defDB7A4f521269a5448FC",
+        "0x61d9800f9fcb4160fb0c6cf3a0902592bac2b434"
+      ]
+    },
+    "deployed": {
+      "txHash": "0x8adbeb73600fb4b96ecc7c133c1e006663bfd93640d3ee51e6ee397d2d6470e4",
+      "index": 0,
+      "typeIdArgs": "0xff1d70fbea716cb99b1b0b9906bf00255fe080808d07bd15352a56273a15a3d5",
+      "capacity": "53800000000"
+    }
+  }
+}

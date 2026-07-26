@@ -1,40 +1,40 @@
 {
   "network": "testnet",
   "action": "deploy:oracle",
-  "generatedAt": "2026-05-11T14:13:32.195Z",
+  "generatedAt": "2026-07-26T20:22:12.159Z",
   "deployment": {
     "kind": "deploy:oracle",
     "mode": "broadcast",
     "network": "testnet",
     "oracleType": {
-      "version": 2,
-      "codeHash": "0x10c9bcc3af00fc3728cb95d5e14ec882716af5f531a010852526ce784f6958ec",
+      "version": 4,
+      "codeHash": "0x5711c27408e948befdf55cdebf29b6ed0b6c56d8866200dab1dd53f28bef8c55",
       "hashType": "data2",
       "depType": "code",
       "outPoint": {
-        "txHash": "0x45f033f0944b50be1e5b80f733c321648ddcfdbe0c183477cf0b77bd0f8312b5",
+        "txHash": "0x797167087bce4fa6b5bb1b6620f4e52bdad86bff28de159a732db0f82440131d",
         "index": 0
       }
     },
     "ownedTypeBindLock": {
-      "version": 1,
+      "version": 2,
       "codeHash": "0x5554bc20c9f3dbb8d1d7a6591b1b2ceeb0bbee822804635ee168911a440a111c",
       "hashType": "data2",
       "depType": "code",
       "outPoint": {
-        "txHash": "0x982a5d5555ebc855a97d9e71a8ac9de9cefc25a62a44ccfc2b6605758c01ba9f",
+        "txHash": "0xff625007fa8ba4ffbbaa97eb57fe70228228655a1fd72acb69e9abfbd1c4e065",
         "index": 0
       },
       "ownerLockHash": "0x7de82d61a7eb2ec82b0dc653e558ba120efcbfbb44dac87c12972d05bf250653"
     },
     "guardianSet": {
       "outPoint": {
-        "txHash": "0xd7f2f0511490fd3151d1d069fe10a2945fa36417b72d23590aa787196d4f6477",
+        "txHash": "0x8adbeb73600fb4b96ecc7c133c1e006663bfd93640d3ee51e6ee397d2d6470e4",
         "index": 0,
-        "typeIdArgs": "0x3e62200a42204a48f974b7d6cc9dce4f8b9a009baf2d848ec316c156feedf1a5",
-        "capacity": "52600000000"
+        "typeIdArgs": "0xff1d70fbea716cb99b1b0b9906bf00255fe080808d07bd15352a56273a15a3d5",
+        "capacity": "53800000000"
       },
-      "guardianSetTypeHash": "0x37da40f642f3eec1f6c6720de58e2cc6a5013660bd43c3c74ed67b127e955a97"
+      "guardianSetTypeHash": "0xf952c3b4f0019c20eb9b1b4049e05df4e4bddad5700238251d9504f4303bd476"
     },
     "oracleConfig": {
       "feedId": "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",
@@ -42,7 +42,7 @@
       "emitterAddress": "0xe101faedac5851e32b9b23b5f9411a8c2bac4aae3ed4dd7b811dd1a72ea4aa71"
     },
     "deployed": {
-      "txHash": "0xa7c34e9d9604685548c1bfdc7a0b9e617fc95c1ddb15112fee3dd127f96f563b",
+      "txHash": "0x6fa71b298dffa04abe7a77e0fe631ab5d66cef1a79f3365ff43afcb96bd49d53",
       "index": 0
     }
   }
