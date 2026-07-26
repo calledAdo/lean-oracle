@@ -7,9 +7,11 @@ import { ccc } from "@ckb-ccc/core";
 import {
   attachOracleBurn,
   attachOracleDeploy,
+  attachOraclePullUpdate,
   attachOracleReadDeps,
   initiateOracleBurnTx,
   initiateOracleDeployTx,
+  initiateOracleUpdateTx,
   initiateReadOracleTx,
 } from "../dist/tx/index.js";
 import { decodeLeanOracleCellDataHex } from "../dist/ckb/index.js";
@@ -24,6 +26,11 @@ const CUSTOM_LOCK = ccc.Script.from({
   codeHash: `0x${"44".repeat(32)}`,
   hashType: "type",
   args: `0x${"55".repeat(20)}`,
+});
+const PUBLIC_LOCK = ccc.Script.from({
+  codeHash: PUBLIC_LOCK_CODE_HASH,
+  hashType: "type",
+  args: "0x",
 });
 
 const guardianTypeScript = ccc.Script.from({
@@ -116,6 +123,25 @@ const oracleCell = {
   },
   outputData: oracleDataHex(),
 };
+const stagingOutPoint = { txHash: `0x${"bc".repeat(32)}`, index: 2n };
+const stagingCell = {
+  ...oracleCell,
+  outPoint: stagingOutPoint,
+  outputData: oracleDataHex({ publishTimeUnix: 5n }),
+};
+const wrongFeedOutPoint = { txHash: `0x${"bd".repeat(32)}`, index: 3n };
+const wrongFeedCell = {
+  ...stagingCell,
+  outPoint: wrongFeedOutPoint,
+  cellOutput: {
+    ...stagingCell.cellOutput,
+    type: ccc.Script.from({
+      codeHash: ORACLE_TYPE_CODE_HASH,
+      hashType: "type",
+      args: `0x${"ef".repeat(32)}`,
+    }),
+  },
+};
 const guardianCell = {
   outPoint: { txHash: `0x${"cd".repeat(32)}`, index: 0n },
   cellOutput: {
@@ -152,6 +178,18 @@ function assertOutPointEqual(actual, expected) {
   assert.equal(actual.txHash, expected.txHash);
   assert.equal(actual.index, expected.index);
 }
+
+const hermesEnvelope = {
+  binary: { encoding: "hex", data: ["00"] },
+  parsed: [
+    {
+      id: FEED_ID,
+      price: { price: "101", conf: "2", expo: -8, publish_time: 20 },
+      ema_price: { price: "99", conf: "3", expo: -8, publish_time: 20 },
+      metadata: { slot: 1, proof_available_time: 20, prev_publish_time: 10 },
+    },
+  ],
+};
 
 // 1. Read-deps builder attaches oracle code dep and latest oracle cell dep only.
 {
@@ -255,5 +293,85 @@ await assert.rejects(
   assert.equal(burnTx.inputs.length, 1);
   assert.equal(burnTx.outputs.length, 0);
 }
+
+// 6. Exact staging updates ignore a fresher same-feed cell and may migrate the output lock.
+{
+  const tx = emptyTx();
+  await attachOraclePullUpdate({
+    network,
+    cccClient: fakeClient({ cells: [oracleCell, stagingCell] }),
+    tx,
+    feedId: FEED_ID,
+    oracleOutPoint: stagingOutPoint,
+    outputLockScript: PUBLIC_LOCK,
+    hermesEnvelope,
+  });
+  assertOutPointEqual(tx.inputs[0].previousOutput, stagingOutPoint);
+  assert.ok(tx.outputs[0].lock.eq(PUBLIC_LOCK));
+}
+
+// 7. Exact burns consume the requested cell instead of discovery's freshest match.
+{
+  const tx = emptyTx();
+  const result = await attachOracleBurn({
+    network,
+    cccClient: fakeClient({ cells: [oracleCell, stagingCell] }),
+    tx,
+    feedId: FEED_ID,
+    oracleOutPoint: stagingOutPoint,
+  });
+  assertOutPointEqual(
+    tx.inputs[result.oracleInputIndex].previousOutput,
+    stagingOutPoint,
+  );
+}
+
+// 8. High-level update/burn workflows thread exact outpoints and output locks.
+{
+  const client = fakeClient({ cells: [oracleCell, stagingCell] });
+  const updateTx = await initiateOracleUpdateTx({
+    network,
+    cccClient: client,
+    feedId: FEED_ID,
+    oracleOutPoint: stagingOutPoint,
+    outputLockScript: PUBLIC_LOCK,
+    hermesEnvelope,
+  });
+  assertOutPointEqual(updateTx.inputs[0].previousOutput, stagingOutPoint);
+  assert.ok(updateTx.outputs[0].lock.eq(PUBLIC_LOCK));
+
+  const burnTx = await initiateOracleBurnTx({
+    network,
+    cccClient: client,
+    feedId: FEED_ID,
+    oracleOutPoint: stagingOutPoint,
+  });
+  assertOutPointEqual(burnTx.inputs[0].previousOutput, stagingOutPoint);
+}
+
+// 9. Exact update and burn reject cells outside the configured oracle/feed group.
+await assert.rejects(
+  () =>
+    attachOraclePullUpdate({
+      network,
+      cccClient: fakeClient({ cells: [wrongFeedCell] }),
+      tx: emptyTx(),
+      feedId: FEED_ID,
+      oracleOutPoint: wrongFeedOutPoint,
+      hermesEnvelope,
+    }),
+  /does not match the configured oracle type and feed/iu,
+);
+await assert.rejects(
+  () =>
+    attachOracleBurn({
+      network,
+      cccClient: fakeClient({ cells: [wrongFeedCell] }),
+      tx: emptyTx(),
+      feedId: FEED_ID,
+      oracleOutPoint: wrongFeedOutPoint,
+    }),
+  /does not match the configured oracle type and feed/iu,
+);
 
 console.log("txBuilders.fixture.mjs: PASS");

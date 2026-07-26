@@ -26,6 +26,7 @@ import {
 } from "./deployOracle.js";
 import { attachOracleBurn } from "./burnOracle.js";
 import type { HexString } from "../types/hex.js";
+import type { LeanOracleCellOutPoint } from "../types/deployment.js";
 
 /**
  * @public
@@ -35,6 +36,8 @@ export interface InitiateOracleUpdateParams {
   cccClient: CccClient;
   feedId: FeedIdHex;
   oracleLockScript?: ScriptLike;
+  oracleOutPoint?: LeanOracleCellOutPoint;
+  outputLockScript?: ScriptLike;
   /**
    * Optional Hermes update envelope.
    *
@@ -74,6 +77,8 @@ export async function initiateOracleUpdateTx(
     tx,
     feedId: params.feedId,
     oracleLockScript: params.oracleLockScript,
+    oracleOutPoint: params.oracleOutPoint,
+    outputLockScript: params.outputLockScript,
     hermesEnvelope: params.hermesEnvelope,
     outputSource: params.outputSource,
   });
@@ -183,6 +188,8 @@ export interface InitiateOracleBurnTxParams {
   feedId: FeedIdHex;
   /** Lock under which the oracle cell to burn was deployed. */
   oracleLockScript?: ScriptLike;
+  /** Exact oracle input to burn, bypassing latest-cell discovery. */
+  oracleOutPoint?: LeanOracleCellOutPoint;
 }
 
 /**
@@ -211,8 +218,8 @@ export async function initiateOracleBurnTx(
     tx,
     feedId: params.feedId,
     oracleLockScript: params.oracleLockScript,
+    oracleOutPoint: params.oracleOutPoint,
   });
 
   return res.mutated;
 }
-

@@ -6,6 +6,7 @@ import type {
   OracleUpdateOutputSource,
 } from "../types/hermes.js";
 import type { LeanOracleNetworkConfig } from "../types/network.js";
+import type { LeanOracleCellOutPoint } from "../types/deployment.js";
 import {
   LeanOracleSdkError,
   LeanOracleOracleDataEncodeError,
@@ -38,6 +39,10 @@ export interface OraclePullUpdateParams {
    * When omitted, oracle discovery uses the deployment’s default public lock (typically AlwaysSuccess).
    */
   oracleLockScript?: ScriptLike;
+  /** Exact oracle input to consume, bypassing latest-cell discovery. */
+  oracleOutPoint?: LeanOracleCellOutPoint;
+  /** Optional lock for the successor output, used for explicit lock migration. */
+  outputLockScript?: ScriptLike;
 
   /**
    * Optional Hermes response body from a prior `fetchHermesLatestPriceUpdates` call (one envelope per GET).
@@ -104,28 +109,31 @@ export async function attachOraclePullUpdate(
   const client = params.cccClient;
 
   // ── ① Resolve the input oracle cell to consume ────────────────────────────
-  const oracleLive = await findLatestOracleLiveCellForFeed(
-    client,
-    params.feedId,
-    {
+  const oracleOutPoint = params.oracleOutPoint ?? (
+    await findLatestOracleLiveCellForFeed(client, params.feedId, {
       deployment,
       oracleLockScript: params.oracleLockScript,
-    },
-  );
-
-  if (!oracleLive) {
-    throw new LeanOracleSdkError(
-      `No oracle live cell found for feed ${params.feedId}`,
-    );
+    })
+  )?.outPoint;
+  if (!oracleOutPoint) {
+    throw new LeanOracleSdkError(`No oracle live cell found for feed ${params.feedId}`);
   }
 
-  const inputCell = await client.getCell({
-    txHash: oracleLive.outPoint.txHash,
-    index: oracleLive.outPoint.index,
-  });
+  const inputCell = await client.getCell(oracleOutPoint);
   if (!inputCell) {
     throw new LeanOracleSdkError(
-      `Oracle input cell not found on-chain at ${oracleLive.outPoint.txHash}:${oracleLive.outPoint.index.toString()}`,
+      `Oracle input cell not found on-chain at ${oracleOutPoint.txHash}:${oracleOutPoint.index.toString()}`,
+    );
+  }
+  const inputType = inputCell.cellOutput.type;
+  if (
+    !inputType ||
+    inputType.codeHash !== deployment.oracleType.codeHash ||
+    inputType.hashType !== deployment.oracleType.hashType ||
+    inputType.args !== params.feedId
+  ) {
+    throw new LeanOracleSdkError(
+      `Oracle input ${oracleOutPoint.txHash}:${oracleOutPoint.index.toString()} does not match the configured oracle type and feed`,
     );
   }
 
@@ -226,10 +234,13 @@ export async function attachOraclePullUpdate(
       previousOutput: inputCell.outPoint,
     }) - 1;
 
+  const outputLock = params.outputLockScript
+    ? Script.from(params.outputLockScript)
+    : Script.from(inputCell.cellOutput.lock);
   const outputsLen = params.tx.addOutput({
     cellOutput: {
       capacity: inputCell.cellOutput.capacity,
-      lock: inputCell.cellOutput.lock,
+      lock: outputLock,
       type: inputCell.cellOutput.type,
     },
     outputData: outputOracleDataHex,
