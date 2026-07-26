@@ -255,6 +255,12 @@ function buildDevnetNetwork() {
         codeHash: guardianSetTypeVersion.codeHash,
         hashType: guardianSetTypeVersion.hashType,
         args: guardianSetTypeArgs,
+        identityVersion:
+          guardianSetDeployment.identityVersion ??
+          guardianSetDeployment.guardianSetType.version,
+        codeVersion:
+          guardianSetDeployment.guardianSetType.codeVersion ??
+          guardianSetTypeVersion.version,
         typeHash: guardianSetTypeHash,
         codeDep: {
           outPoint: bigintOutPoint({

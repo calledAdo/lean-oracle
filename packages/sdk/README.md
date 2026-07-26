@@ -352,6 +352,13 @@ dependency are attached by `attachGuardianSetRotation`. The former
 deployer-locked identity v3 singleton remains live as legacy state but is no
 longer selected by the canonical preset.
 
+SDK `0.4.0` makes these distinctions explicit. Custom network configurations
+must rename `defaultPublicOracleLock` to `canonicalPublicOracleLock`, replace
+`guardianSetTypeVersions` with separate `guardianSetIdentityHistory` and
+`guardianSetCodeVersions` maps, and include `identityVersion` plus `codeVersion`
+on the current `guardianSetType`. `leanOracleMainnetPreset` is now an
+unavailable-network config with no `deployment` property.
+
 ## Scripts
 
 - `npm run build` — type-check and emit to `dist/`

@@ -9,7 +9,7 @@ import { LeanOracleSdkError } from "../errors.js";
 export type LeanOracleNetworkName = "testnet" | "mainnet" | "devnet";
 
 /**
- * All RPC/Hermes/deployment knobs for one environment.
+ * RPC and Hermes endpoints shared by available and unavailable networks.
  *
  * @public
  */

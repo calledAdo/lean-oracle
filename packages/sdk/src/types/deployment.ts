@@ -75,7 +75,7 @@ export interface LeanOracleGuardianSetCodeRef {
   hashType: LeanOracleScriptHashType;
   /** Code cell dependency for this guardian-set implementation. */
   codeDep: LeanOracleCodeDep;
-  /** Guardian contract binary version used by this identity. */
+  /** Canonical guardian code-deployment version used by this identity. */
   codeVersion: number;
 }
 
