@@ -1,7 +1,7 @@
 {
   "network": "testnet",
   "action": "deploy:oracle",
-  "generatedAt": "2026-07-26T10:43:05.461Z",
+  "generatedAt": "2026-07-26T20:22:12.159Z",
   "deployment": {
     "kind": "deploy:oracle",
     "mode": "broadcast",
@@ -29,12 +29,12 @@
     },
     "guardianSet": {
       "outPoint": {
-        "txHash": "0x5d756dece38618d904c9617d9f1446d1c15d73b87af961ea72144cde1b600729",
+        "txHash": "0x8adbeb73600fb4b96ecc7c133c1e006663bfd93640d3ee51e6ee397d2d6470e4",
         "index": 0,
-        "typeIdArgs": "0x4767b1c0444b9206234622869b1205d1acac2b492c34c52e59af14278002a734",
-        "capacity": "52600000000"
+        "typeIdArgs": "0xff1d70fbea716cb99b1b0b9906bf00255fe080808d07bd15352a56273a15a3d5",
+        "capacity": "53800000000"
       },
-      "guardianSetTypeHash": "0x6ad59c0e12fa8f1c6280bf9fecad985b9ca2b81fa723ed97c34b46a1a95f5cec"
+      "guardianSetTypeHash": "0xf952c3b4f0019c20eb9b1b4049e05df4e4bddad5700238251d9504f4303bd476"
     },
     "oracleConfig": {
       "feedId": "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",
@@ -42,7 +42,7 @@
       "emitterAddress": "0xe101faedac5851e32b9b23b5f9411a8c2bac4aae3ed4dd7b811dd1a72ea4aa71"
     },
     "deployed": {
-      "txHash": "0xad073056a38aba77dad92fd29d96158a32410432d8d4264850a7442b1ed09742",
+      "txHash": "0x6fa71b298dffa04abe7a77e0fe631ab5d66cef1a79f3365ff43afcb96bd49d53",
       "index": 0
     }
   }

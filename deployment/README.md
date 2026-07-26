@@ -19,13 +19,23 @@ The deployment flow has two layers:
 
 2. **State deployments**
    - `deploy:guardian-set`
+   - `deploy:guardian-set-candidate`
    - `deploy:oracle`
 
    These create the live guardian-set and oracle state cells using canonical promoted code versions.
 
 Guardian maintenance uses `rotate:guardian-set`. It consumes the current
 guardian cell and applies a Wormhole `GuardianSetUpgrade` VAA verified by the
-guardian v2 type script.
+guardian code v3 type script. The canonical testnet identity is v4 under
+OwnedTypeBindLock v2, so rotation is permissionless when the transaction
+preserves the exact `(lock, type)` pair; the governance VAA remains the trust
+gate.
+
+`deploy:guardian-set-candidate` stages a new singleton identity without moving
+canonical artifacts. The repository's restartable
+`npm run migrate:owned-bind-guardian:testnet` workflow authenticates a staging
+oracle, requires a separate burn confirmation, migrates it to the public lock,
+and atomically promotes guardian/oracle state artifacts.
 
 Code deployment artifacts support:
 
@@ -76,6 +86,7 @@ Examples:
 node --enable-source-maps ./dist/index.js deploy:guardian-set-type --network testnet
 node --enable-source-maps ./dist/index.js promote:guardian-set-type --network testnet
 node --enable-source-maps ./dist/index.js deploy:guardian-set --network testnet
+node --enable-source-maps ./dist/index.js deploy:guardian-set-candidate --network testnet
 node --enable-source-maps ./dist/index.js rotate:guardian-set --network testnet
 ```
 
@@ -121,6 +132,9 @@ Copy `.env.example` to `.env`.
 - `BROADCAST`
   - defaults to `false`
   - chain mutations require `BROADCAST=true` together with `DRY_RUN=false`
+- `GUARDIAN_MIGRATION_CONFIRM_BURN`
+  - required as `true` only when resuming the guarded testnet migration across
+    the exact old-public-oracle burn boundary
 
 ### Required for `deploy:oracle`
 
@@ -154,10 +168,12 @@ Run these in order for a given network:
 1. `deploy:guardian-set-type`
 2. `promote:guardian-set-type`
 3. `deploy:guardian-set`
-4. `rotate:guardian-set` when a canonical successor VAA is available
-5. `deploy:oracle-type`
-6. `promote:oracle-type`
-7. `deploy:oracle`
+4. `deploy:guardian-set-candidate` only for a separately reviewed identity migration
+5. the guarded migration workflow, when replacing the canonical identity
+6. `rotate:guardian-set` when a canonical successor VAA is available
+7. `deploy:oracle-type`
+8. `promote:oracle-type`
+9. `deploy:oracle`
 
 That order matters:
 
@@ -181,9 +197,10 @@ Important current behavior:
   then replaces its canonical-state artifact followed by its audit receipt;
   synchronous write failures are rolled back, while a process termination
   between renames can leave an older receipt beside the newer canonical state
-- the current public-testnet guardian cell is deployer-locked, so its operator
-  key must sign rotations even though the v2 type script verifies governance
-  authorization independently
+- the canonical public-testnet guardian identity v4 uses OwnedTypeBindLock v2,
+  so third parties may submit rotations that preserve `(lock, type)` and pass
+  guardian code v3's governance-VAA checks; the owner key is required only for
+  the lock's escape path
 
 ## Artifacts
 
@@ -199,10 +216,13 @@ Code deployments are stored by:
 State deployments are stored by:
 
 - `<network>.deploy-guardian-set.json`
+- `<network>.deploy-guardian-set-candidate.json`
 - `<network>.rotate-guardian-set.json`
 - `<network>.deploy-oracle.json`
+- `<network>.migrate-owned-bind-guardian.json`
 
-These artifacts are local operator state and are usually gitignored.
+Canonical testnet artifacts and migration receipts are checked in; local
+devnet artifacts and in-progress migration checkpoints are gitignored.
 
 ## Devnet note
 

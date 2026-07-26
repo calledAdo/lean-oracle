@@ -186,13 +186,30 @@ history, are checked in under
 `leanOracleTestnetPreset` consumes these directly — most consumers do not need
 the hashes by hand.
 
-The live guardian v2 cell is `0x5d756dece38618d904c9617d9f1446d1c15d73b87af961ea72144cde1b600729:0`
-with Type ID args `0x4767b1c0444b9206234622869b1205d1acac2b492c34c52e59af14278002a734`.
-That transaction is also the verified on-chain rotation from set 6 to set 7.
+The canonical guardian singleton is **identity v4**, backed by unchanged
+guardian code v3. It is live at
+`0x8adbeb73600fb4b96ecc7c133c1e006663bfd93640d3ee51e6ee397d2d6470e4:0`
+with Type ID args
+`0xff1d70fbea716cb99b1b0b9906bf00255fe080808d07bd15352a56273a15a3d5`
+and full type hash
+`0xf952c3b4f0019c20eb9b1b4049e05df4e4bddad5700238251d9504f4303bd476`.
+Its state lock is OwnedTypeBindLock v2: anyone may submit an immediate
+Wormhole-authorized rotation when the exact `(lock, type)` pair continues in
+the output. The owner escape remains available to the deployment key.
+
+The former deployer-locked identity v3 singleton remains live at
+`0x5d756dece38618d904c9617d9f1446d1c15d73b87af961ea72144cde1b600729:0`
+as explicit legacy state; canonical SDK operations no longer reference it.
 The current public BTC/USD oracle v4 cell is
-`0x52fac33042a7e677e86204a73527243b6c0de5b7dfa37d1eaab16d4a0a335ad0:0`;
-its latest cutover verification update committed at testnet block `21875262`
-after the Type ID-protected guardian v3 code-dependency migration.
+`0x6fa71b298dffa04abe7a77e0fe631ab5d66cef1a79f3365ff43afcb96bd49d53:0`.
+It remains oracle code v4 and now stores the guardian identity v4 full type
+hash. The replaced public oracle at `0x52fac33042a7e677e86204a73527243b6c0de5b7dfa37d1eaab16d4a0a335ad0:0`
+is spent.
+
+These version axes are independent: guardian **identity v4** describes the
+singleton and lock lineage, guardian **code v3** describes its executable
+binary, and oracle **v4** describes the oracle executable. Changing only the
+guardian state lock did not create oracle v5 or guardian code v4.
 
 ### Mainnet
 
@@ -221,7 +238,7 @@ them in CKB-native state:
 This implementation uses a **current-set-only** guardian policy. Only the
 active canonical guardian set is accepted. After Wormhole guardian rotation,
 callers must fetch a fresh Hermes update signed by the new active set. Guardian
-v2 validates the canonical Wormhole `GuardianSetUpgrade` VAA on-chain before
+code v3 validates the canonical Wormhole `GuardianSetUpgrade` VAA on-chain before
 replacing the active addresses and quorum.
 
 ## Security & Threat Model
@@ -249,10 +266,10 @@ replacing the active addresses and quorum.
 **Known boundaries:**
 
 - **Guardian rotation:** the current-set-only policy means an update signed by
-  the previous set is rejected after the CKB guardian cell rotates. Guardian v2
-  cryptographically validates the Wormhole governance VAA, but the current
-  testnet cell remains deployer-locked, so the operator key must still sign the
-  CKB transaction until a permissionless lock migration is deployed.
+  the previous set is rejected after the CKB guardian cell rotates. Identity v4
+  combines governance-verifying guardian code v3 with OwnedTypeBindLock v2.
+  Any submitter may rotate it only by preserving the exact `(lock, type)` pair
+  and supplying the valid `N -> N+1` Wormhole governance VAA.
 - **No price arbitration:** the oracle stores exactly what Pyth signed. If
   Pyth publishes an aberrant value, Lean Oracle will accept it. Consumers
   should apply deviation/sanity checks if their use case warrants.

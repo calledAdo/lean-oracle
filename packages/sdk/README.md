@@ -333,17 +333,21 @@ history (or `undefined` for an inert preset like mainnet before launch).
 `leanOraclePresetForOracleVersion` throws a `LeanOracleSdkError` if the config
 has no version history or the requested version is absent.
 
-The testnet guardian script was upgraded once to add on-chain verification of
-Wormhole `GuardianSetUpgrade` VAAs. Its immutable v1 and governance-v2
-identities are recorded under `deployment.guardianSetTypeVersions`; deployment
-entry v3 is the current Type ID-protected code dep for the same v2 identity,
-and its live state is set 7. Ordinary future guardian rotations happen in place
-via `set_index` without another `codeHash` change.
+The testnet guardian history is recorded under
+`deployment.guardianSetTypeVersions`. Canonical guardian **identity v4** has
+Type ID args
+`0xff1d70fbea716cb99b1b0b9906bf00255fe080808d07bd15352a56273a15a3d5`
+and reuses guardian **code v3**. The version increment describes the new
+singleton/lock lineage, not a new binary. Oracle code remains independently at
+**v4**; no oracle v5 was created for this guardian-lock migration.
 
-The v2 type script makes the rotation authorization cryptographic, but the
-current testnet guardian cell is still deployer-locked. A keeper can build the
-transaction, while the operator key remains necessary to land it until the
-lock is migrated.
+Identity v4 is locked by `deployment.guardianSetLock`, an
+OwnedTypeBindLock v2 instance. Anyone may rotate the singleton by preserving
+its exact `(lock, type)` identity and attaching a valid immediate-successor
+Wormhole `GuardianSetUpgrade` VAA. Both the lock dependency and guardian code
+dependency are attached by `attachGuardianSetRotation`. The former
+deployer-locked identity v3 singleton remains live as legacy state but is no
+longer selected by the canonical preset.
 
 ## Scripts
 
@@ -352,6 +356,8 @@ lock is migrated.
 - `npm run test` — build, then run SDK fixture checks for codecs, discovery, client behavior, transaction builders, fee balancing, package boundaries, and accumulator parsing
 - `npm run test:pack` — pack the SDK, install it into a temporary consumer project, and import every advertised subpath
 - `npm run release:check` — `npm test && npm run test:pack`
+- `npm run migrate:owned-bind-guardian:testnet` — repository operator workflow
+  for the guarded, restartable identity-v4 cutover
 - `npm run prepublishOnly` — clean, then run the release check before `npm publish`
 - `npm run test:integration:devnet` — run the repository's opt-in integration tests against an already-deployed local devnet
 
