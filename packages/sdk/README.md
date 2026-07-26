@@ -9,13 +9,14 @@ applications that want to read or update the oracle on CKB testnet.
   `packages/sdk`)
 - **Issues:** <https://github.com/calledAdo/lean-oracle/issues>
 
-> **Pre-release (`0.1.x`).** The curated root surface is stable; advanced
+> **Pre-release (`0.4.x`).** The curated root surface is stable; advanced
 > subpath exports may still change. Pin a version in production.
 
 Mainnet is not live yet. The first npm release is testnet-first; use
 `LeanOracleTestnetClient` or pass an explicit `LeanOracleNetworkConfig`.
-`LeanOracleMainnetClient` is exported for API continuity, but its deployment
-values remain intentionally inert until a mainnet deployment is published.
+`LeanOracleMainnetClient` remains useful for Hermes calls. CKB-backed methods
+throw a deployment-unavailable error until a mainnet deployment is published;
+the mainnet preset contains no placeholder hashes.
 
 ## Status
 
@@ -26,7 +27,7 @@ This package already contains the core TypeScript surfaces for:
 - **Discovery** — oracle cell discovery and input resolution
 - **Transactions** — transaction drafting for read and update flows
 - **Rebalancing** — fee rebalancing helpers for complex oracle updates
-- **Presets** — pre-configured network and client surfaces; testnet is live first, mainnet is intentionally inert until deployment
+- **Presets** — a live testnet deployment and explicit unavailable-mainnet metadata
 
 The package is substantive and functional, though it continues to evolve
 alongside the on-chain scripts.
@@ -329,12 +330,14 @@ const oracle = new LeanOracleClient({
 ```
 
 `leanOracleLatestOracleVersion(config)` returns the highest version key in the
-history (or `undefined` for an inert preset like mainnet before launch).
+history (or `undefined` for an unavailable network like mainnet before launch).
 `leanOraclePresetForOracleVersion` throws a `LeanOracleSdkError` if the config
 has no version history or the requested version is absent.
 
-The testnet guardian history is recorded under
-`deployment.guardianSetTypeVersions`. Canonical guardian **identity v4** has
+The testnet guardian state identities are recorded under
+`deployment.guardianSetIdentityHistory`, while executable deployments are
+recorded independently under `deployment.guardianSetCodeVersions`. Canonical
+guardian **identity v4** has
 Type ID args
 `0xff1d70fbea716cb99b1b0b9906bf00255fe080808d07bd15352a56273a15a3d5`
 and reuses guardian **code v3**. The version increment describes the new
@@ -418,10 +421,10 @@ const network = {
   ckbJsonRpcUrl: rpcUrl,
   hermesBaseUrl: process.env.HERMES_BASE_URL ?? "https://hermes.pyth.network",
   deployment: {
-    // The lock used by your local oracle cell when callers do not pass
+    // The canonical public lock used when callers do not pass
     // `oracleLockScript` explicitly. This may be AlwaysSuccess, an
     // owned-type-bind-lock instance, or another lock from your devnet setup.
-    defaultPublicOracleLock: {
+    canonicalPublicOracleLock: {
       script: {
         codeHash: "0x...",
         hashType: "type",
@@ -444,6 +447,8 @@ const network = {
       codeHash: "0x...",
       hashType: "type",
       args: "0x...",
+      identityVersion: 1,
+      codeVersion: 1,
       codeDep: {
         outPoint: { txHash: "0x...", index: 0n },
         depType: "code",
@@ -461,7 +466,7 @@ const oracle = new LeanOracleClient({ network, cccClient });
 ```
 
 If your oracle cells are locked by a script other than
-`network.deployment.defaultPublicOracleLock.script`, pass that lock on each
+`network.deployment.canonicalPublicOracleLock.script`, pass that lock on each
 operation:
 
 ```ts

@@ -130,8 +130,7 @@ export interface LeanOracleDeployment {
    * {@link oracleType} is swapped for the desired entry (see
    * `leanOraclePresetForOracleVersion`).
    *
-   * Omitted on inert presets (e.g. mainnet before launch) and on any config
-   * a caller hand-builds without a version history.
+   * May be omitted on caller-built deployments that do not retain history.
    */
   oracleTypeVersions?: Record<number, LeanOracleOracleTypeRef>;
 

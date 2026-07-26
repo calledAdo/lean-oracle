@@ -205,7 +205,7 @@ async function verifyCandidate(client, candidate, deployerLock) {
     throw new Error("Guardian candidate bind-lock owner does not match deployer lock");
   }
   const publicLock = ccc.Script.from(
-    leanOracleTestnetPreset.deployment.defaultPublicOracleLock.script,
+    leanOracleTestnetPreset.deployment.canonicalPublicOracleLock.script,
   );
   if (publicLock.args !== expectedOwnerHash) {
     throw new Error("Public oracle bind-lock owner does not match deployer lock");
@@ -342,7 +342,7 @@ async function verifyInitialState(client, deployerLock) {
   if (!oldGuardian) throw new Error("Legacy guardian singleton is not live");
 
   const publicLock = ccc.Script.from(
-    leanOracleTestnetPreset.deployment.defaultPublicOracleLock.script,
+    leanOracleTestnetPreset.deployment.canonicalPublicOracleLock.script,
   );
   const oldPublic = await requireOneOracle(
     await findOracleCellsForLock(client, leanOracleTestnetPreset, publicLock),
@@ -468,7 +468,7 @@ async function burnOldPublic(params) {
     const successors = await findOracleCellsForLock(
       params.client,
       params.network,
-      params.network.deployment.defaultPublicOracleLock.script,
+      params.network.deployment.canonicalPublicOracleLock.script,
     );
     if (successors.length !== 0) {
       throw new Error(
@@ -509,7 +509,7 @@ async function burnOldPublic(params) {
   const successors = await findOracleCellsForLock(
     params.client,
     params.network,
-    params.network.deployment.defaultPublicOracleLock.script,
+    params.network.deployment.canonicalPublicOracleLock.script,
   );
   if (successors.length !== 0) {
     throw new Error("A legacy public oracle successor remains live after burn");
@@ -519,7 +519,7 @@ async function burnOldPublic(params) {
 
 async function migratePublic(params) {
   const publicLock = ccc.Script.from(
-    params.network.deployment.defaultPublicOracleLock.script,
+    params.network.deployment.canonicalPublicOracleLock.script,
   );
   const publicCells = await findOracleCellsForLock(
     params.client,

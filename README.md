@@ -213,9 +213,9 @@ guardian state lock did not create oracle v5 or guardian code v4.
 
 ### Mainnet
 
-Not deployed. `LeanOracleMainnetClient` is exported for API continuity but its
-deployment values are intentionally inert until a real mainnet deployment is
-published.
+Not deployed. `LeanOracleMainnetClient` supports Hermes calls, but CKB-backed
+methods reject with an explicit deployment-unavailable error. The preset does
+not ship fake mainnet script hashes or outpoints.
 
 ## Pythnet / Wormhole Components
 

@@ -224,7 +224,7 @@ function buildDevnetNetwork() {
     hermesBaseUrl: HERMES_BASE_URL,
     ckbJsonRpcUrl: DEVNET_RPC,
     deployment: {
-      defaultPublicOracleLock: {
+      canonicalPublicOracleLock: {
         script: {
           codeHash:
             "0x9bd7e06f3ecf4be0f2fcd2188b23f1b9fcc88e5d4b65a8637b17723bbda3cce8",
@@ -362,7 +362,7 @@ async function main() {
   tx.setWitnessArgsAt(inputIndex, witnessArgs);
 
   tx.addCellDeps(network.deployment.oracleType.codeDep);
-  tx.addCellDeps(network.deployment.defaultPublicOracleLock.codeDep);
+  tx.addCellDeps(network.deployment.canonicalPublicOracleLock.codeDep);
   tx.addCellDeps(
     await resolveGuardianSetCellDep(client, network.deployment, {
       expectedGuardianSetTypeHash: before.guardianSetTypeHash,
