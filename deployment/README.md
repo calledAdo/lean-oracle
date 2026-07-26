@@ -178,7 +178,9 @@ Important current behavior:
 - guardian rotation writes both an audit receipt and the advanced canonical
   guardian-state artifact used by later oracle deployments
 - rotation waits for commitment, reads the successor back exactly, and only
-  then atomically replaces its receipt and canonical-state artifacts
+  then replaces its canonical-state artifact followed by its audit receipt;
+  synchronous write failures are rolled back, while a process termination
+  between renames can leave an older receipt beside the newer canonical state
 - the current public-testnet guardian cell is deployer-locked, so its operator
   key must sign rotations even though the v2 type script verifies governance
   authorization independently

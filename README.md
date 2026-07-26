@@ -192,7 +192,7 @@ That transaction is also the verified on-chain rotation from set 6 to set 7.
 The current public BTC/USD oracle v4 cell is
 `0x52fac33042a7e677e86204a73527243b6c0de5b7dfa37d1eaab16d4a0a335ad0:0`;
 its latest cutover verification update committed at testnet block `21875262`
-using the Type ID-protected guardian v3 code dep.
+after the Type ID-protected guardian v3 code-dependency migration.
 
 ### Mainnet
 

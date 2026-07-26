@@ -141,9 +141,10 @@ export interface LeanOracleDeployment {
   /**
    * Optional guardian-set script history keyed by deployment version.
    *
-   * The latest entry equals {@link guardianSetType}. Older entries describe
-   * immutable legacy singleton cells and are retained for inspection and
-   * explicit migration tooling; normal oracle updates use the latest entry.
+   * The latest entry equals {@link guardianSetType}. Older entries may
+   * describe legacy singleton cells or dependency-only redeployments of the
+   * same singleton identity. They are retained for inspection and explicit
+   * migration tooling; normal oracle updates use the latest entry.
    */
   guardianSetTypeVersions?: Record<number, LeanOracleGuardianSetTypeRef>;
 }
