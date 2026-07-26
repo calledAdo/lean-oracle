@@ -17,6 +17,7 @@ const ACTIONS: DeploymentAction[] = [
   "deploy:oracle-type",
   "deploy:owned-type-bind-lock",
   "deploy:guardian-set",
+  "deploy:guardian-set-candidate",
   "rotate:guardian-set",
   "deploy:oracle",
   "promote:guardian-set-type",

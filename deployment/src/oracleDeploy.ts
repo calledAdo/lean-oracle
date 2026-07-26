@@ -3,9 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { createCccClient, createPrivateKeySigner } from "./ccc.js";
-import { readCodeDeploymentArtifact } from "./artifacts.js";
+import { loadLatestCanonicalCodeVersion } from "./codeVersions.js";
 import type {
-  CodeDeploymentArtifact,
   CodeDeploymentVersionRecord,
   DeploymentContext,
   DeploymentNetwork,
@@ -29,39 +28,12 @@ function parseU32(name: string, value: string): number {
   return n;
 }
 
-function selectLatestCanonicalVersion(
-  versions: Record<number, CodeDeploymentVersionRecord>,
-): CodeDeploymentVersionRecord {
-  const keys = Object.keys(versions)
-    .map((k) => Number(k))
-    .filter((n) => Number.isFinite(n) && n >= 0);
-  if (keys.length === 0) throw new Error("No canonical versions present");
-  const max = Math.max(...keys);
-  const record = versions[max];
-  if (!record) throw new Error("Failed to resolve selected canonical version record");
-  return record;
-}
-
 function loadCodeVersion(params: {
   deploymentRoot: string;
   network: DeploymentNetwork;
   scriptFamily: "oracle-type" | "owned-type-bind-lock";
 }): CodeDeploymentVersionRecord {
-  const env = readCodeDeploymentArtifact({
-    deploymentRoot: params.deploymentRoot,
-    network: params.network,
-    scriptFamily: params.scriptFamily,
-  });
-  const deployment = env?.deployment;
-  if (!deployment || typeof deployment !== "object") {
-    throw new Error(
-      `Missing ${params.scriptFamily} code deployment artifact for ${params.network}`,
-    );
-  }
-  const artifact = deployment as CodeDeploymentArtifact;
-  return selectLatestCanonicalVersion(
-    artifact.versions as Record<number, CodeDeploymentVersionRecord>,
-  );
+  return loadLatestCanonicalCodeVersion(params);
 }
 
 function loadOracleTypeVersion(params: {

@@ -5,6 +5,7 @@ export type DeploymentAction =
   | "deploy:oracle-type"
   | "deploy:owned-type-bind-lock"
   | "deploy:guardian-set"
+  | "deploy:guardian-set-candidate"
   | "rotate:guardian-set"
   | "deploy:oracle"
   | "promote:guardian-set-type"
@@ -29,6 +30,8 @@ export interface NetworkDeploymentConfig {
   network: DeploymentNetwork;
   build: BuildConfig;
   guardianSet: GuardianSetConfig;
+  guardianSetIdentityVersion?: number;
+  guardianSetLock?: "deployer" | "owned-type-bind";
 }
 
 /** Resolved operator env (required RPC/key + optional overrides). */

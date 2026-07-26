@@ -4,6 +4,7 @@ import path from "node:path";
 import { ccc } from "@ckb-ccc/core";
 
 import { createCccClient, createPrivateKeySigner } from "./ccc.js";
+import { waitForCommittedTransaction } from "./chainFinality.js";
 import {
   encodeGuardianSetDataBytes,
   loadGuardianSetTypeVersion,
@@ -271,7 +272,9 @@ export async function rotateGuardianSetStateCell(params: {
   await tx.completeFeeBy(signer, ctx.network === "devnet" ? 1000n : undefined);
 
   const txHash = await signer.sendTransaction(tx);
-  const committed = await waitForCommittedTransaction(client, txHash);
+  const committed = await waitForCommittedTransaction(client, txHash, {
+    operation: "guardian rotation",
+  });
 
   const predecessor = await client.getCellLive(liveCell.outPoint, true, true);
   if (predecessor) {
@@ -325,20 +328,4 @@ export async function rotateGuardianSetStateCell(params: {
       },
     },
   };
-}
-
-async function waitForCommittedTransaction(
-  client: ccc.Client,
-  txHash: string,
-): Promise<NonNullable<Awaited<ReturnType<ccc.Client["getTransaction"]>>>> {
-  const deadline = Date.now() + 180_000;
-  while (Date.now() < deadline) {
-    const transaction = await client.getTransaction(txHash);
-    if (transaction?.status === "committed") return transaction;
-    if (transaction?.status === "rejected") {
-      throw new Error(`Guardian rotation transaction ${txHash} was rejected`);
-    }
-    await new Promise((resolve) => setTimeout(resolve, 3_000));
-  }
-  throw new Error(`Guardian rotation transaction ${txHash} did not commit within 180 seconds`);
 }

@@ -30,5 +30,7 @@
       "0x7899cEAB1DC961Dae9defDB7A4f521269a5448FC",
       "0x61d9800f9fcb4160fb0c6cf3a0902592bac2b434"
     ]
-  }
+  },
+  "guardianSetIdentityVersion": 4,
+  "guardianSetLock": "owned-type-bind"
 }

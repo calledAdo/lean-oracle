@@ -18,6 +18,7 @@ const CHAIN_MUTATING_ACTIONS = new Set<DeploymentAction>([
   "deploy:oracle-type",
   "deploy:owned-type-bind-lock",
   "deploy:guardian-set",
+  "deploy:guardian-set-candidate",
   "rotate:guardian-set",
   "deploy:oracle",
 ]);
@@ -109,6 +110,8 @@ export async function runDeploymentAction(
       return promoteCodeDeployment(ctx, "owned-type-bind-lock");
     case "deploy:guardian-set":
       return deployGuardianSetStateCell({ ctx });
+    case "deploy:guardian-set-candidate":
+      return deployGuardianSetStateCell({ ctx, candidate: true });
     case "rotate:guardian-set":
       return rotateGuardianSetStateCell({ ctx });
     case "deploy:oracle":
