@@ -34,7 +34,7 @@ const network = {
   hermesBaseUrl: "http://stub.invalid",
   deployment: {
     oracleType: { codeHash: `0x${"11".repeat(32)}`, hashType: "type" },
-    defaultPublicOracleLock: {
+    canonicalPublicOracleLock: {
       script: { codeHash: `0x${"22".repeat(32)}`, hashType: "type", args: "0x" },
     },
   },

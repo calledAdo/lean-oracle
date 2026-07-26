@@ -202,12 +202,12 @@ export async function attachOraclePullUpdate(
   // If the consumed oracle is locked by the default public lock, also attach its code dep.
   {
     const publicLock = Script.from({
-      codeHash: deployment.defaultPublicOracleLock.script.codeHash,
-      hashType: deployment.defaultPublicOracleLock.script.hashType,
-      args: deployment.defaultPublicOracleLock.script.args ?? "0x",
+      codeHash: deployment.canonicalPublicOracleLock.script.codeHash,
+      hashType: deployment.canonicalPublicOracleLock.script.hashType,
+      args: deployment.canonicalPublicOracleLock.script.args ?? "0x",
     });
     if (scriptsEqual(Script.from(inputCell.cellOutput.lock), publicLock)) {
-      params.tx.addCellDeps(deployment.defaultPublicOracleLock.codeDep);
+      params.tx.addCellDeps(deployment.canonicalPublicOracleLock.codeDep);
     }
   }
 

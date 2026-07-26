@@ -9,6 +9,10 @@ export type {
   LeanOracleCodeDep,
   LeanOracleScriptIdentity,
   LeanOracleScriptHashType,
+  LeanOracleGuardianSetCodeRef,
+  LeanOracleGuardianSetIdentityRef,
+  LeanOracleGuardianSetTypeRef,
+  LeanOracleGuardianSetLockRef,
 } from "./deployment.js";
 export type { HexString, FeedIdHex } from "./hex.js";
 export type { LeanOracleGuardianSetData } from "./guardianSet.js";

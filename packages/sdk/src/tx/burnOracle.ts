@@ -100,12 +100,12 @@ export async function attachOracleBurn(
   // the lock can execute. Custom locks are the caller's responsibility.
   {
     const publicLock = Script.from({
-      codeHash: deployment.defaultPublicOracleLock.script.codeHash,
-      hashType: deployment.defaultPublicOracleLock.script.hashType,
-      args: deployment.defaultPublicOracleLock.script.args ?? "0x",
+      codeHash: deployment.canonicalPublicOracleLock.script.codeHash,
+      hashType: deployment.canonicalPublicOracleLock.script.hashType,
+      args: deployment.canonicalPublicOracleLock.script.args ?? "0x",
     });
     if (scriptsEqual(Script.from(inputCell.cellOutput.lock), publicLock)) {
-      params.tx.addCellDeps(deployment.defaultPublicOracleLock.codeDep);
+      params.tx.addCellDeps(deployment.canonicalPublicOracleLock.codeDep);
     }
   }
 

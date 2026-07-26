@@ -24,12 +24,12 @@ const DEFAULT_FIND_PAGE_LIMIT = 256;
  */
 export interface FindOracleLiveCellsForFeedOptions {
   /**
-   * Network deployment metadata (**oracle type identity** plus optional **`defaultPublicOracleLockScript`** pinning).
+   * Network deployment metadata (**oracle type identity** plus the canonical public lock pinning).
    */
   deployment: LeanOracleDeployment;
 
   /**
-   * **Lock script override** — when **`undefined`**, selects **`deployment.defaultPublicOracleLockScript`**,
+   * **Lock script override** — when **`undefined`**, selects **`deployment.canonicalPublicOracleLock.script`**,
    * allowing fully deterministic “public oracle” scans without `KnownScript` tables.
    */
   oracleLockScript?: ScriptLike;
@@ -164,7 +164,7 @@ function resolveOracleLockForQuery(
     return Script.from(explicit);
   }
 
-  const preset = deployment.defaultPublicOracleLock.script;
+  const preset = deployment.canonicalPublicOracleLock.script;
   return Script.from({
     codeHash: preset.codeHash,
     hashType: preset.hashType,

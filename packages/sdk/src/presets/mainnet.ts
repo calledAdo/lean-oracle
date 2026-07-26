@@ -14,7 +14,7 @@ export const leanOracleMainnetPreset: LeanOracleNetworkConfig = {
   hermesBaseUrl: "https://hermes.pyth.network",
   ckbJsonRpcUrl: "https://mainnet.ckb.dev",
   deployment: {
-    defaultPublicOracleLock: {
+    canonicalPublicOracleLock: {
       script: leanOracleCccAlwaysSuccessLockPreset,
       codeDep: {
         outPoint: leanOracleCccAlwaysSuccessCodeDepOutPointMainnet,
@@ -41,6 +41,8 @@ export const leanOracleMainnetPreset: LeanOracleNetworkConfig = {
       codeHash: `0x${"00".repeat(32)}`,
       hashType: "type",
       args: "0x",
+      identityVersion: 0,
+      codeVersion: 0,
       codeDep: {
         outPoint: {
           txHash: `0x${"00".repeat(32)}`,

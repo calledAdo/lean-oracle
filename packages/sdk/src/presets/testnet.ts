@@ -1,4 +1,92 @@
 import type { LeanOracleNetworkConfig } from "../types/network.js";
+import type {
+  LeanOracleGuardianSetCodeRef,
+  LeanOracleGuardianSetIdentityRef,
+  LeanOracleGuardianSetLockRef,
+} from "../types/deployment.js";
+
+const canonicalOwnedTypeBindLock: LeanOracleGuardianSetLockRef = {
+  script: {
+    codeHash:
+      "0x5554bc20c9f3dbb8d1d7a6591b1b2ceeb0bbee822804635ee168911a440a111c",
+    hashType: "data2",
+    args: "0x7de82d61a7eb2ec82b0dc653e558ba120efcbfbb44dac87c12972d05bf250653",
+  },
+  codeDep: {
+    outPoint: {
+      txHash:
+        "0xff625007fa8ba4ffbbaa97eb57fe70228228655a1fd72acb69e9abfbd1c4e065",
+      index: 0n,
+    },
+    depType: "code",
+  },
+};
+
+const guardianIdentityV1: LeanOracleGuardianSetIdentityRef = {
+  codeHash:
+    "0x57bddf3d57ea45c88ab68d0de706bbaecd68895fd6062b099626deb157100119",
+  hashType: "data2",
+  args: "0x3e62200a42204a48f974b7d6cc9dce4f8b9a009baf2d848ec316c156feedf1a5",
+  identityVersion: 1,
+};
+
+const guardianIdentityV2: LeanOracleGuardianSetIdentityRef = {
+  codeHash:
+    "0x7ab8c7d225c0e74ecb01b58f8c7a13e298df08460d0947b776b2e47cd5525782",
+  hashType: "data2",
+  args: "0x4767b1c0444b9206234622869b1205d1acac2b492c34c52e59af14278002a734",
+  identityVersion: 2,
+};
+
+const guardianIdentityV4: LeanOracleGuardianSetIdentityRef = {
+  codeHash:
+    "0x7ab8c7d225c0e74ecb01b58f8c7a13e298df08460d0947b776b2e47cd5525782",
+  hashType: "data2",
+  args: "0xff1d70fbea716cb99b1b0b9906bf00255fe080808d07bd15352a56273a15a3d5",
+  identityVersion: 4,
+};
+
+const guardianCodeV1: LeanOracleGuardianSetCodeRef = {
+  codeHash: guardianIdentityV1.codeHash,
+  hashType: guardianIdentityV1.hashType,
+  codeVersion: 1,
+  codeDep: {
+    outPoint: {
+      txHash:
+        "0x78f83c3967c566c50c783d45c9165af94d23018c5254228b3eb418aa0c5ac37f",
+      index: 0n,
+    },
+    depType: "code",
+  },
+};
+
+const guardianCodeV2: LeanOracleGuardianSetCodeRef = {
+  codeHash: guardianIdentityV2.codeHash,
+  hashType: guardianIdentityV2.hashType,
+  codeVersion: 2,
+  codeDep: {
+    outPoint: {
+      txHash:
+        "0xfd256c6dbd3b0e2be05cb6f3cbe1f2a0aa2102bb1c1aa63ddeacd670d19b5524",
+      index: 0n,
+    },
+    depType: "code",
+  },
+};
+
+const guardianCodeV3: LeanOracleGuardianSetCodeRef = {
+  codeHash: guardianIdentityV4.codeHash,
+  hashType: guardianIdentityV4.hashType,
+  codeVersion: 3,
+  codeDep: {
+    outPoint: {
+      txHash:
+        "0x0903144bfb3a736d1a989783d0e6304c153bb5b7627b64843e73e9b2f58f42b9",
+      index: 0n,
+    },
+    depType: "code",
+  },
+};
 
 /**
  * Opinionated testnet preset backed by the canonical Lean Oracle testnet
@@ -11,7 +99,7 @@ import type { LeanOracleNetworkConfig } from "../types/network.js";
  *
  * Operators who deploy oracle cells under a different lock should pass an
  * explicit `oracleLockScript` to discovery/client calls or provide a custom
- * network config with that lock as `deployment.defaultPublicOracleLock`.
+ * network config with that lock as `deployment.canonicalPublicOracleLock`.
  *
  * @public
  */
@@ -20,26 +108,7 @@ export const leanOracleTestnetPreset: LeanOracleNetworkConfig = {
   hermesBaseUrl: "https://hermes.pyth.network",
   ckbJsonRpcUrl: "https://testnet.ckb.dev",
   deployment: {
-    defaultPublicOracleLock: {
-      script: {
-        codeHash:
-          "0x5554bc20c9f3dbb8d1d7a6591b1b2ceeb0bbee822804635ee168911a440a111c",
-        hashType: "data2",
-        // 32-byte owner lock hash baked into the testnet bind-lock instance
-        // used by deploy:oracle. Anyone consuming the cell must either
-        // preserve continuity in the outputs or include an input cell locked
-        // by this hash (owner-escape path).
-        args: "0x7de82d61a7eb2ec82b0dc653e558ba120efcbfbb44dac87c12972d05bf250653",
-      },
-      codeDep: {
-        outPoint: {
-          txHash:
-            "0xff625007fa8ba4ffbbaa97eb57fe70228228655a1fd72acb69e9abfbd1c4e065",
-          index: 0n,
-        },
-        depType: "code",
-      },
-    },
+    canonicalPublicOracleLock: canonicalOwnedTypeBindLock,
     // Current (latest) oracle type-script version - used by default for
     // discovery, update, deploy, and burn. Equals `oracleTypeVersions[4]`.
     oracleType: {
@@ -126,112 +195,17 @@ export const leanOracleTestnetPreset: LeanOracleNetworkConfig = {
       address:
         "0xe101faedac5851e32b9b23b5f9411a8c2bac4aae3ed4dd7b811dd1a72ea4aa71",
     },
-    guardianSetType: {
-      codeHash:
-        "0x7ab8c7d225c0e74ecb01b58f8c7a13e298df08460d0947b776b2e47cd5525782",
-      hashType: "data2",
-      args: "0xff1d70fbea716cb99b1b0b9906bf00255fe080808d07bd15352a56273a15a3d5",
-      identityVersion: 4,
-      codeVersion: 3,
-      codeDep: {
-        outPoint: {
-          txHash:
-            "0x0903144bfb3a736d1a989783d0e6304c153bb5b7627b64843e73e9b2f58f42b9",
-          index: 0n,
-        },
-        depType: "code",
-      },
+    guardianSetType: { ...guardianIdentityV4, ...guardianCodeV3 },
+    guardianSetLock: canonicalOwnedTypeBindLock,
+    guardianSetIdentityHistory: {
+      1: guardianIdentityV1,
+      2: guardianIdentityV2,
+      4: guardianIdentityV4,
     },
-    guardianSetLock: {
-      script: {
-        codeHash:
-          "0x5554bc20c9f3dbb8d1d7a6591b1b2ceeb0bbee822804635ee168911a440a111c",
-        hashType: "data2",
-        args: "0x7de82d61a7eb2ec82b0dc653e558ba120efcbfbb44dac87c12972d05bf250653",
-      },
-      codeDep: {
-        outPoint: {
-          txHash:
-            "0xff625007fa8ba4ffbbaa97eb57fe70228228655a1fd72acb69e9abfbd1c4e065",
-          index: 0n,
-        },
-        depType: "code",
-      },
-    },
-    guardianSetTypeVersions: {
-      // v1 - trusted-lock rotation only; retained for legacy cell inspection.
-      1: {
-        codeHash:
-          "0x57bddf3d57ea45c88ab68d0de706bbaecd68895fd6062b099626deb157100119",
-        hashType: "data2",
-        identityVersion: 1,
-        codeVersion: 1,
-        args:
-          "0x3e62200a42204a48f974b7d6cc9dce4f8b9a009baf2d848ec316c156feedf1a5",
-        codeDep: {
-          outPoint: {
-            txHash:
-              "0x78f83c3967c566c50c783d45c9165af94d23018c5254228b3eb418aa0c5ac37f",
-            index: 0n,
-          },
-          depType: "code",
-        },
-      },
-      // v2 - first governance-verifying deployment; code cell was untyped.
-      2: {
-        codeHash:
-          "0x7ab8c7d225c0e74ecb01b58f8c7a13e298df08460d0947b776b2e47cd5525782",
-        hashType: "data2",
-        identityVersion: 2,
-        codeVersion: 2,
-        args:
-          "0x4767b1c0444b9206234622869b1205d1acac2b492c34c52e59af14278002a734",
-        codeDep: {
-          outPoint: {
-            txHash:
-              "0xfd256c6dbd3b0e2be05cb6f3cbe1f2a0aa2102bb1c1aa63ddeacd670d19b5524",
-            index: 0n,
-          },
-          depType: "code",
-        },
-      },
-      // v3 - legacy deployer-locked singleton and Type ID-protected code dep.
-      3: {
-        codeHash:
-          "0x7ab8c7d225c0e74ecb01b58f8c7a13e298df08460d0947b776b2e47cd5525782",
-        hashType: "data2",
-        identityVersion: 3,
-        codeVersion: 3,
-        args:
-          "0x4767b1c0444b9206234622869b1205d1acac2b492c34c52e59af14278002a734",
-        codeDep: {
-          outPoint: {
-            txHash:
-              "0x0903144bfb3a736d1a989783d0e6304c153bb5b7627b64843e73e9b2f58f42b9",
-            index: 0n,
-          },
-          depType: "code",
-        },
-      },
-      // v4 - canonical permissionless singleton identity. It reuses guardian
-      // code v3 and moves only the state lock to OwnedTypeBindLock v2.
-      4: {
-        codeHash:
-          "0x7ab8c7d225c0e74ecb01b58f8c7a13e298df08460d0947b776b2e47cd5525782",
-        hashType: "data2",
-        args:
-          "0xff1d70fbea716cb99b1b0b9906bf00255fe080808d07bd15352a56273a15a3d5",
-        identityVersion: 4,
-        codeVersion: 3,
-        codeDep: {
-          outPoint: {
-            txHash:
-              "0x0903144bfb3a736d1a989783d0e6304c153bb5b7627b64843e73e9b2f58f42b9",
-            index: 0n,
-          },
-          depType: "code",
-        },
-      },
+    guardianSetCodeVersions: {
+      1: guardianCodeV1,
+      2: guardianCodeV2,
+      3: guardianCodeV3,
     },
   },
 };

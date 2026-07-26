@@ -55,28 +55,34 @@ export interface LeanOracleOracleTypeRef {
   codeDep: LeanOracleCodeDep;
 }
 
-/**
- * Full immutable identity of one guardian-set type-script deployment.
- *
- * Unlike oracle scripts, guardian identities include Type ID args because each
- * code upgrade requires a new singleton state cell.
- *
- * @public
- */
-export interface LeanOracleGuardianSetTypeRef {
+/** Full immutable Type Script identity of one guardian-set singleton. */
+export interface LeanOracleGuardianSetIdentityRef {
   /** Guardian-set type script code hash. */
   codeHash: HexString;
   /** Guardian-set type script hash type. */
   hashType: LeanOracleScriptHashType;
   /** Type ID args identifying the singleton guardian state cell. */
   args: HexString;
+  /** Monotonic guardian singleton/configuration identity version. */
+  identityVersion: number;
+}
+
+/** Executable deployment metadata for one guardian contract code version. */
+export interface LeanOracleGuardianSetCodeRef {
+  /** Guardian-set contract binary hash. */
+  codeHash: HexString;
+  /** How the code hash resolves. */
+  hashType: LeanOracleScriptHashType;
   /** Code cell dependency for this guardian-set implementation. */
   codeDep: LeanOracleCodeDep;
-  /** Monotonic guardian singleton/configuration identity version. */
-  identityVersion?: number;
   /** Guardian contract binary version used by this identity. */
-  codeVersion?: number;
+  codeVersion: number;
 }
+
+/** Current operational guardian reference: state identity plus executable code. */
+export interface LeanOracleGuardianSetTypeRef
+  extends LeanOracleGuardianSetIdentityRef,
+    LeanOracleGuardianSetCodeRef {}
 
 /**
  * Lock identity and executable dependency for the canonical guardian state.
@@ -100,7 +106,7 @@ export interface LeanOracleDeployment {
    * **Public / permissionless** oracle installs: indexer query uses this script unless the caller overrides
    * **`oracleLockScript`** when calling **`findLatestOracleLiveCellForFeed`**.
    */
-  defaultPublicOracleLock: {
+  canonicalPublicOracleLock: {
     script: LeanOracleScriptIdentity;
     codeDep: LeanOracleCodeDep;
   };
@@ -159,14 +165,14 @@ export interface LeanOracleDeployment {
   guardianSetLock?: LeanOracleGuardianSetLockRef;
 
   /**
-   * Optional guardian-set script history keyed by deployment version.
+   * Distinct guardian singleton identities keyed by identity version.
    *
-   * The latest entry equals {@link guardianSetType}. Older entries may
-   * describe legacy singleton cells or dependency-only redeployments of the
-   * same singleton identity. They are retained for inspection and explicit
-   * migration tooling; normal oracle updates use the latest entry.
+   * Type ID args belong here because they identify state cells, not code deps.
    */
-  guardianSetTypeVersions?: Record<number, LeanOracleGuardianSetTypeRef>;
+  guardianSetIdentityHistory?: Record<number, LeanOracleGuardianSetIdentityRef>;
+
+  /** Guardian contract code deployments keyed independently by code version. */
+  guardianSetCodeVersions?: Record<number, LeanOracleGuardianSetCodeRef>;
 }
 
 /**

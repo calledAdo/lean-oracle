@@ -41,7 +41,7 @@ const guardianTypeScript = ccc.Script.from({
 const guardianTypeHash = ccc.hashCkb(guardianTypeScript.toBytes());
 
 const deployment = {
-  defaultPublicOracleLock: {
+  canonicalPublicOracleLock: {
     script: { codeHash: PUBLIC_LOCK_CODE_HASH, hashType: "type", args: "0x" },
     codeDep: {
       outPoint: { txHash: `0x${"66".repeat(32)}`, index: 0n },

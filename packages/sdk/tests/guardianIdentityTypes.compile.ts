@@ -1,4 +1,8 @@
-import type { LeanOracleDeployment } from "../src/types/deployment.js";
+import type {
+  LeanOracleDeployment,
+  LeanOracleGuardianSetCodeRef,
+  LeanOracleGuardianSetIdentityRef,
+} from "../src/types/deployment.js";
 import type { HexString } from "../src/types/hex.js";
 
 const hex32 = (byte: string): HexString =>
@@ -13,10 +17,15 @@ const identityV4 = {
   codeHash: hex32("22"),
   hashType: "data2" as const,
   args: hex32("33"),
-  codeDep,
   identityVersion: 4,
+} satisfies LeanOracleGuardianSetIdentityRef;
+
+const guardianCodeV3 = {
+  codeHash: hex32("22"),
+  hashType: "data2" as const,
+  codeDep,
   codeVersion: 3,
-};
+} satisfies LeanOracleGuardianSetCodeRef;
 
 const ownedBindLock = {
   script: {
@@ -28,10 +37,11 @@ const ownedBindLock = {
 };
 
 const deployment = {
-  defaultPublicOracleLock: ownedBindLock,
+  canonicalPublicOracleLock: ownedBindLock,
   guardianSetLock: ownedBindLock,
-  guardianSetType: identityV4,
-  guardianSetTypeVersions: { 4: identityV4 },
+  guardianSetType: { ...identityV4, ...guardianCodeV3 },
+  guardianSetIdentityHistory: { 4: identityV4 },
+  guardianSetCodeVersions: { 3: guardianCodeV3 },
   oracleType: {
     codeHash: hex32("66"),
     hashType: "data2" as const,

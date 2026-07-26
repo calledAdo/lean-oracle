@@ -102,7 +102,7 @@ export function loadDevnetDeploymentFixture({ env }) {
   // Canonical public oracle lock: OwnedTypeBindLock instance keyed to the
   // deployer's owner-lock-hash, matching what `deploy:oracle` produced on
   // devnet. Discovery queries that omit `oracleLockScript` fall back to this.
-  const defaultPublicOracleLock = {
+  const canonicalPublicOracleLock = {
     script: {
       codeHash: bindLockVersion.codeHash,
       hashType: bindLockVersion.hashType,
@@ -121,13 +121,13 @@ export function loadDevnetDeploymentFixture({ env }) {
     // Lock script under which the canonical devnet oracle cell is held.
     // Tests pass this as `oracleLockScript:` for discovery; the signer's own
     // lock continues to be used for `rebalanceFuel` (fuel + change).
-    oracleLockScript: defaultPublicOracleLock.script,
+    oracleLockScript: canonicalPublicOracleLock.script,
     network: {
       name: "devnet",
       hermesBaseUrl: env.hermesBaseUrl,
       ckbJsonRpcUrl: env.rpcUrl,
       deployment: {
-        defaultPublicOracleLock,
+        canonicalPublicOracleLock,
         oracleType: {
           codeHash: oracleTypeVersion.codeHash,
           hashType: oracleTypeVersion.hashType,
