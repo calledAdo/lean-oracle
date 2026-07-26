@@ -72,6 +72,20 @@ export interface LeanOracleGuardianSetTypeRef {
   args: HexString;
   /** Code cell dependency for this guardian-set implementation. */
   codeDep: LeanOracleCodeDep;
+  /** Monotonic guardian singleton/configuration identity version. */
+  identityVersion?: number;
+  /** Guardian contract binary version used by this identity. */
+  codeVersion?: number;
+}
+
+/**
+ * Lock identity and executable dependency for the canonical guardian state.
+ *
+ * @public
+ */
+export interface LeanOracleGuardianSetLockRef {
+  script: LeanOracleScriptIdentity;
+  codeDep: LeanOracleCodeDep;
 }
 
 /**
@@ -137,6 +151,12 @@ export interface LeanOracleDeployment {
   };
 
   guardianSetType: LeanOracleGuardianSetTypeRef;
+
+  /**
+   * Optional lock pinned to the canonical guardian state cell. Rotation
+   * builders attach its dependency and reject a mismatched live cell.
+   */
+  guardianSetLock?: LeanOracleGuardianSetLockRef;
 
   /**
    * Optional guardian-set script history keyed by deployment version.
