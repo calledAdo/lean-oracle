@@ -29,6 +29,7 @@ function wormholeQuorum(n: number): number {
 function hexToBytes(hex: string): Uint8Array {
   const h = hex.startsWith("0x") ? hex.slice(2) : hex;
   if (h.length % 2 !== 0) throw new Error("odd-length hex");
+  if (!/^[0-9a-fA-F]*$/u.test(h)) throw new Error("invalid hex characters");
   const out = new Uint8Array(h.length / 2);
   for (let i = 0; i < out.length; i++) out[i] = parseInt(h.slice(i * 2, i * 2 + 2), 16);
   return out;
@@ -138,10 +139,14 @@ function readTypeIdArgsFromArtifact(deploymentRoot: string, network: string): st
  * Consumes the current guardian-set cell and produces the next one, attaching a
  * guardian-set-upgrade governance VAA (env `GUARDIAN_UPGRADE_VAA`) in the group
  * input witness. The `guardian_set_script` verifies that VAA against the current
- * on-chain set, so this is authorized by cryptography, not by the operator key.
+ * on-chain set, so successor authenticity is authorized by cryptography. The
+ * current testnet lock separately requires the operator key to submit the CKB
+ * transaction.
  */
 export async function rotateGuardianSetStateCell(params: {
   ctx: Pick<DeploymentContext, "network" | "config" | "env" | "paths">;
+  /** Test seam for exact dry-run planning without a public RPC. */
+  cccClient?: ccc.Client;
 }): Promise<unknown> {
   const { ctx } = params;
   const dryRun = ctx.env.dryRun !== "false";
@@ -169,23 +174,12 @@ export async function rotateGuardianSetStateCell(params: {
     guardianAddresses: upgrade.addresses,
   };
 
-  if (dryRun) {
-    return {
-      kind: "rotate:guardian-set",
-      mode: "dry-run",
-      network: ctx.network,
-      governanceVaa: { signingSetIndex: upgrade.signingSetIndex, newIndex: upgrade.newIndex },
-      nextSet,
-      note: "Broadcast mode resolves the live cell and enforces signingSetIndex == on-chain setIndex.",
-    };
-  }
-
   if (!gsTypeVersion.txHash || gsTypeVersion.index === undefined) {
     throw new Error("guardian-set-type version missing txHash/index; cannot rotate");
   }
 
-  const client = createCccClient(ctx.network, ctx.env.rpcUrl, ctx.env);
-  const signer = createPrivateKeySigner(client, ctx.env.deployerPrivateKey);
+  const client =
+    params.cccClient ?? createCccClient(ctx.network, ctx.env.rpcUrl, ctx.env);
 
   const guardianType = ccc.Script.from({
     codeHash: gsTypeVersion.codeHash,
@@ -241,16 +235,71 @@ export async function rotateGuardianSetStateCell(params: {
   const witnessArgs = ccc.WitnessArgs.from({ inputType: ccc.hexFrom(vaaBytes) });
   tx.setWitnessArgsAt(0, witnessArgs);
 
+  if (dryRun) {
+    return {
+      kind: "rotate:guardian-set",
+      mode: "dry-run",
+      network: ctx.network,
+      governanceVaa: {
+        signingSetIndex: upgrade.signingSetIndex,
+        newIndex: upgrade.newIndex,
+      },
+      currentSet,
+      nextSet,
+      planned: {
+        currentOutPoint: {
+          txHash: liveCell.outPoint.txHash,
+          index: Number(liveCell.outPoint.index),
+        },
+        typeIdArgs,
+        outputCapacity,
+        codeDep: {
+          outPoint: {
+            txHash: gsTypeVersion.txHash,
+            index: gsTypeVersion.index,
+          },
+          depType: gsTypeVersion.depType,
+        },
+        unsignedTransition: ccc.hexFrom(tx.toBytes()),
+      },
+    };
+  }
+
+  const signer = createPrivateKeySigner(client, ctx.env.deployerPrivateKey);
+
   await tx.completeInputsByCapacity(signer);
   await tx.completeFeeBy(signer, ctx.network === "devnet" ? 1000n : undefined);
 
   const txHash = await signer.sendTransaction(tx);
+  const committed = await waitForCommittedTransaction(client, txHash);
+
+  const predecessor = await client.getCellLive(liveCell.outPoint, true, true);
+  if (predecessor) {
+    throw new Error("Guardian rotation committed but predecessor is still live");
+  }
+  const committedCell = await client.getCellLive(
+    { txHash, index: 0n },
+    true,
+    true,
+  );
+  if (!committedCell) {
+    throw new Error("Guardian rotation committed without a live output at index 0");
+  }
+  if (
+    !committedCell.cellOutput.type?.eq(guardianType) ||
+    !committedCell.cellOutput.lock.eq(liveCell.cellOutput.lock) ||
+    committedCell.cellOutput.capacity !== outputCapacity ||
+    ccc.hexFrom(committedCell.outputData) !== ccc.hexFrom(nextDataBytes)
+  ) {
+    throw new Error("Committed guardian rotation output failed exact readback verification");
+  }
 
   return {
     kind: "rotate:guardian-set",
     mode: "broadcast",
     network: ctx.network,
     rotated: { from: currentSet.setIndex, to: nextSet.setIndex },
+    verifiedAtBlock: committed.blockNumber?.toString(),
     nextSet,
     deployed: { txHash, index: 0, capacity: tx.outputs[0].capacity },
     canonicalState: {
@@ -276,4 +325,20 @@ export async function rotateGuardianSetStateCell(params: {
       },
     },
   };
+}
+
+async function waitForCommittedTransaction(
+  client: ccc.Client,
+  txHash: string,
+): Promise<NonNullable<Awaited<ReturnType<ccc.Client["getTransaction"]>>>> {
+  const deadline = Date.now() + 180_000;
+  while (Date.now() < deadline) {
+    const transaction = await client.getTransaction(txHash);
+    if (transaction?.status === "committed") return transaction;
+    if (transaction?.status === "rejected") {
+      throw new Error(`Guardian rotation transaction ${txHash} was rejected`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 3_000));
+  }
+  throw new Error(`Guardian rotation transaction ${txHash} did not commit within 180 seconds`);
 }

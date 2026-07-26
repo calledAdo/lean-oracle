@@ -1,18 +1,18 @@
 {
   "network": "testnet",
   "action": "deploy:guardian-set",
-  "generatedAt": "2026-07-26T10:02:03.165Z",
+  "generatedAt": "2026-07-26T11:25:45.812Z",
   "deployment": {
     "kind": "deploy:guardian-set",
     "mode": "broadcast",
     "network": "testnet",
     "guardianSetType": {
-      "version": 2,
+      "version": 3,
       "codeHash": "0x7ab8c7d225c0e74ecb01b58f8c7a13e298df08460d0947b776b2e47cd5525782",
       "hashType": "data2",
       "depType": "code",
       "outPoint": {
-        "txHash": "0xfd256c6dbd3b0e2be05cb6f3cbe1f2a0aa2102bb1c1aa63ddeacd670d19b5524",
+        "txHash": "0x0903144bfb3a736d1a989783d0e6304c153bb5b7627b64843e73e9b2f58f42b9",
         "index": 0
       }
     },

@@ -4,12 +4,15 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import { ccc } from "@ckb-ccc/core";
+
 import {
   readCodeDeploymentArtifact,
   writeDeploymentActionArtifacts,
   writeDeploymentArtifact,
 } from "../dist/artifacts.js";
 import { rotateGuardianSetStateCell } from "../dist/guardianSetRotate.js";
+import { encodeGuardianSetDataBytes } from "../dist/guardianSetDeploy.js";
 
 const officialV7 = `0x${fs
   .readFileSync(
@@ -136,6 +139,39 @@ test("official gs7 VAA produces an exact dry-run transition", async () => {
         },
         paths: { deploymentRoot: root },
       },
+      cccClient: {
+        findCellsByType: async function* () {
+          yield {
+            outPoint: {
+              txHash: priorState.deployed.txHash,
+              index: BigInt(priorState.deployed.index),
+            },
+            cellOutput: {
+              capacity: BigInt(priorState.deployed.capacity),
+              lock: ccc.Script.from({
+                codeHash: `0x${"77".repeat(32)}`,
+                hashType: "type",
+                args: "0x",
+              }),
+              type: ccc.Script.from({
+                codeHash: guardianSetType.codeHash,
+                hashType: guardianSetType.hashType,
+                args: priorState.deployed.typeIdArgs,
+              }),
+            },
+            outputData: ccc.hexFrom(
+              encodeGuardianSetDataBytes({
+                setIndex: 6,
+                quorum: 13,
+                guardianAddresses: Array.from(
+                  { length: 19 },
+                  (_, index) => `0x${index.toString(16).padStart(40, "0")}`,
+                ),
+              }),
+            ),
+          };
+        },
+      },
     });
     assert.equal(result.mode, "dry-run");
     assert.deepEqual(result.governanceVaa, {
@@ -145,6 +181,9 @@ test("official gs7 VAA produces an exact dry-run transition", async () => {
     assert.equal(result.nextSet.setIndex, 7);
     assert.equal(result.nextSet.quorum, 13);
     assert.equal(result.nextSet.guardianAddresses.length, 19);
+    assert.equal(result.planned.currentOutPoint.txHash, priorState.deployed.txHash);
+    assert.equal(result.planned.outputCapacity, 52_600_000_000n);
+    assert.match(result.planned.unsignedTransition, /^0x[0-9a-f]+$/u);
     assert.equal(
       readCodeDeploymentArtifact({
         deploymentRoot: root,
@@ -156,4 +195,23 @@ test("official gs7 VAA produces an exact dry-run transition", async () => {
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("rotation rejects non-hex VAA input before artifact or chain resolution", async () => {
+  await assert.rejects(
+    () =>
+      rotateGuardianSetStateCell({
+        ctx: {
+          network: "testnet",
+          config: { network: "testnet", build: {}, guardianSet: priorState.guardianSet },
+          env: {
+            dryRun: "true",
+            guardianUpgradeVaa: "0xzz",
+            guardianSetTypeIdArgs: `0x${"44".repeat(32)}`,
+          },
+          paths: { deploymentRoot: "/does/not/matter" },
+        },
+      }),
+    /hex/u,
+  );
 });

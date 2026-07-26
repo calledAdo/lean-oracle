@@ -13,7 +13,7 @@
  * witness encoders) live behind their own explicit subpaths — see
  * {@link ./tx}, {@link ./fuel}, {@link ./hermes}, {@link ./presets},
  * {@link ./ckb}, and {@link ./advanced}. Witness encoders are reachable via
- * `./advanced`.
+ * `./advanced`, and `./wormhole`.
  */
 
 // ── Client ───────────────────────────────────────────────────────────────────

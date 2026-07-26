@@ -208,6 +208,30 @@ await assert.rejects(
   assert.equal(client.resolutions, 1);
 }
 
+// Cancellation after the fetch boundary must not mutate the transaction.
+{
+  const controller = new AbortController();
+  const tx = txWithExistingInput();
+  let receivedSignal;
+  await assert.rejects(
+    () =>
+      buildGuardianSetRotationIfBehind({
+        network,
+        cccClient: fakeClient(),
+        tx,
+        signal: controller.signal,
+        fetchUpgradeVaa: async (_currentIndex, signal) => {
+          receivedSignal = signal;
+          controller.abort(new Error("stop after fetch"));
+          return officialV7;
+        },
+      }),
+    /aborted/u,
+  );
+  assert.strictEqual(receivedSignal, controller.signal);
+  assert.equal(tx.inputs.length, 1);
+}
+
 // Public codecs should reject values that would be wrapped or rejected on-chain.
 assert.throws(() => wormholeQuorum(0), LeanOracleSdkError);
 assert.throws(() => wormholeQuorum(1.5), LeanOracleSdkError);

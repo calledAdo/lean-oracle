@@ -37,4 +37,13 @@ if (ctx.action === "validate:config") {
   for (const artifactPath of artifactPaths) {
     console.log(`Wrote deployment artifact: ${artifactPath}`);
   }
+  if (artifactPaths.length === 0) {
+    console.log(
+      JSON.stringify(
+        result,
+        (_key, value) => (typeof value === "bigint" ? value.toString() : value),
+        2,
+      ),
+    );
+  }
 }

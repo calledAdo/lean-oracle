@@ -37,6 +37,10 @@ Promotion actions move a candidate into the canonical version map:
 - `promote:guardian-set-type`
 - `promote:oracle-type`
 
+Promotion accepts only a committed, live Type ID code cell whose data hash,
+capacity, Type ID args, and local optimized binary all match the candidate
+artifact.
+
 ## Script identity policy
 
 Custom Lean Oracle scripts are published as raw code blobs and referenced with:
@@ -164,6 +168,7 @@ That order matters:
 
 The toolbox performs a real chain broadcast only when both `DRY_RUN=false` and
 `BROADCAST=true`. Local promotion actions update artifacts without broadcasting.
+Dry-run actions print their plan and never create or overwrite artifacts.
 
 Important current behavior:
 
@@ -172,6 +177,8 @@ Important current behavior:
 - guardian-set and oracle state cells compute occupied capacity dynamically instead of using fixed placeholder capacities
 - guardian rotation writes both an audit receipt and the advanced canonical
   guardian-state artifact used by later oracle deployments
+- rotation waits for commitment, reads the successor back exactly, and only
+  then atomically replaces its receipt and canonical-state artifacts
 - the current public-testnet guardian cell is deployer-locked, so its operator
   key must sign rotations even though the v2 type script verifies governance
   authorization independently

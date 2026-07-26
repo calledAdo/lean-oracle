@@ -1,7 +1,7 @@
 {
   "network": "testnet",
   "action": "promote:guardian-set-type",
-  "generatedAt": "2026-07-26T09:57:06.864Z",
+  "generatedAt": "2026-07-26T11:25:45.812Z",
   "deployment": {
     "scriptFamily": "guardian-set-type",
     "versions": {
@@ -25,6 +25,18 @@
         "capacity": "11787700000000",
         "version": 2,
         "promotedAt": "2026-07-26T09:57:06.864Z"
+      },
+      "3": {
+        "mode": "broadcast",
+        "codeHash": "0x7ab8c7d225c0e74ecb01b58f8c7a13e298df08460d0947b776b2e47cd5525782",
+        "hashType": "data2",
+        "depType": "code",
+        "txHash": "0x0903144bfb3a736d1a989783d0e6304c153bb5b7627b64843e73e9b2f58f42b9",
+        "index": 0,
+        "capacity": "11794200000000",
+        "typeIdArgs": "0x089d2b2708f9a1ff6cfc165d9edcfbbc73bfcf6f1a829601d781d8322b78ed13",
+        "version": 3,
+        "promotedAt": "2026-07-26T11:25:45.812Z"
       }
     }
   }

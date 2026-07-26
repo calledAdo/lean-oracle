@@ -44,6 +44,27 @@ export function writeDeploymentArtifact(
   action: DeploymentAction,
   deployment: unknown,
 ): { artifactPath: string; envelope: DeploymentArtifactEnvelope } {
+  const prepared = prepareDeploymentArtifact(
+    deploymentRoot,
+    network,
+    action,
+    deployment,
+  );
+  writePreparedArtifactsAtomically([prepared]);
+  return prepared;
+}
+
+interface PreparedDeploymentArtifact {
+  artifactPath: string;
+  envelope: DeploymentArtifactEnvelope;
+}
+
+function prepareDeploymentArtifact(
+  deploymentRoot: string,
+  network: DeploymentNetwork,
+  action: DeploymentAction,
+  deployment: unknown,
+): PreparedDeploymentArtifact {
   const artifactDir = path.join(deploymentRoot, "artifacts");
   fs.mkdirSync(artifactDir, { recursive: true });
 
@@ -83,15 +104,66 @@ export function writeDeploymentArtifact(
     deployment: mergedDeployment,
   };
 
-  fs.writeFileSync(
-    artifactPath,
-    JSON.stringify(
-      envelope,
-      (_key, value) => (typeof value === "bigint" ? value.toString() : value),
-      2,
-    ),
-  );
   return { artifactPath, envelope };
+}
+
+function serializeArtifact(envelope: DeploymentArtifactEnvelope): string {
+  return JSON.stringify(
+    envelope,
+    (_key, value) => (typeof value === "bigint" ? value.toString() : value),
+    2,
+  );
+}
+
+/**
+ * Stage every artifact beside its destination, then atomically rename each
+ * completed file. On a synchronous failure, already-renamed destinations are
+ * restored from their captured bytes so the action remains all-or-nothing.
+ */
+function writePreparedArtifactsAtomically(
+  prepared: PreparedDeploymentArtifact[],
+): void {
+  const nonce = `${String(process.pid)}-${Date.now().toString(36)}`;
+  const staged = prepared.map((item, index) => ({
+    ...item,
+    tempPath: `${item.artifactPath}.${nonce}-${String(index)}.tmp`,
+    original: fs.existsSync(item.artifactPath)
+      ? fs.readFileSync(item.artifactPath)
+      : undefined,
+  }));
+  const renamed: typeof staged = [];
+
+  try {
+    for (const item of staged) {
+      fs.writeFileSync(item.tempPath, serializeArtifact(item.envelope));
+    }
+    for (const item of staged) {
+      fs.renameSync(item.tempPath, item.artifactPath);
+      renamed.push(item);
+    }
+  } catch (error) {
+    for (const item of staged) {
+      if (fs.existsSync(item.tempPath)) fs.unlinkSync(item.tempPath);
+    }
+    for (const item of renamed.reverse()) {
+      if (item.original === undefined) {
+        if (fs.existsSync(item.artifactPath)) fs.unlinkSync(item.artifactPath);
+        continue;
+      }
+      const restorePath = `${item.artifactPath}.${nonce}.restore.tmp`;
+      fs.writeFileSync(restorePath, item.original);
+      fs.renameSync(restorePath, item.artifactPath);
+    }
+    throw error;
+  }
+}
+
+function isDryRunDeployment(deployment: unknown): boolean {
+  return (
+    !!deployment &&
+    typeof deployment === "object" &&
+    (deployment as { mode?: unknown }).mode === "dry-run"
+  );
 }
 
 /**
@@ -105,30 +177,43 @@ export function writeDeploymentActionArtifacts(
   action: DeploymentAction,
   deployment: unknown,
 ): {
-  artifactPath: string;
   artifactPaths: string[];
-  envelope: DeploymentArtifactEnvelope;
+  artifactPath?: string;
+  envelope?: DeploymentArtifactEnvelope;
 } {
-  const primary = writeDeploymentArtifact(
+  if (isDryRunDeployment(deployment)) {
+    return { artifactPaths: [] };
+  }
+
+  const primary = prepareDeploymentArtifact(
     deploymentRoot,
     network,
     action,
     deployment,
   );
-  const artifactPaths = [primary.artifactPath];
+  const prepared = [primary];
 
   if (action === "rotate:guardian-set" && deployment && typeof deployment === "object") {
     const canonicalState = (deployment as { canonicalState?: unknown }).canonicalState;
     if (canonicalState !== undefined) {
-      const canonical = writeDeploymentArtifact(
+      const canonical = prepareDeploymentArtifact(
         deploymentRoot,
         network,
         "deploy:guardian-set",
         canonicalState,
       );
-      artifactPaths.push(canonical.artifactPath);
+      prepared.push(canonical);
     }
   }
 
-  return { ...primary, artifactPaths };
+  // Advance the canonical pointer before its audit receipt. A process crash
+  // between the two atomic renames can then lose only audit freshness; state
+  // consumers never observe a newer receipt paired with a stale live pointer.
+  const writeOrder =
+    prepared.length === 2 ? [prepared[1]!, prepared[0]!] : prepared;
+  writePreparedArtifactsAtomically(writeOrder);
+  return {
+    ...primary,
+    artifactPaths: prepared.map((item) => item.artifactPath),
+  };
 }

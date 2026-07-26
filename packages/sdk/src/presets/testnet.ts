@@ -134,7 +134,7 @@ export const leanOracleTestnetPreset: LeanOracleNetworkConfig = {
       codeDep: {
         outPoint: {
           txHash:
-            "0xfd256c6dbd3b0e2be05cb6f3cbe1f2a0aa2102bb1c1aa63ddeacd670d19b5524",
+            "0x0903144bfb3a736d1a989783d0e6304c153bb5b7627b64843e73e9b2f58f42b9",
           index: 0n,
         },
         depType: "code",
@@ -157,7 +157,7 @@ export const leanOracleTestnetPreset: LeanOracleNetworkConfig = {
           depType: "code",
         },
       },
-      // v2 - current; verifies Wormhole GuardianSetUpgrade VAAs on-chain.
+      // v2 - first governance-verifying deployment; code cell was untyped.
       2: {
         codeHash:
           "0x7ab8c7d225c0e74ecb01b58f8c7a13e298df08460d0947b776b2e47cd5525782",
@@ -168,6 +168,22 @@ export const leanOracleTestnetPreset: LeanOracleNetworkConfig = {
           outPoint: {
             txHash:
               "0xfd256c6dbd3b0e2be05cb6f3cbe1f2a0aa2102bb1c1aa63ddeacd670d19b5524",
+            index: 0n,
+          },
+          depType: "code",
+        },
+      },
+      // v3 - current Type ID-protected deployment of the identical v2 binary.
+      3: {
+        codeHash:
+          "0x7ab8c7d225c0e74ecb01b58f8c7a13e298df08460d0947b776b2e47cd5525782",
+        hashType: "data2",
+        args:
+          "0x4767b1c0444b9206234622869b1205d1acac2b492c34c52e59af14278002a734",
+        codeDep: {
+          outPoint: {
+            txHash:
+              "0x0903144bfb3a736d1a989783d0e6304c153bb5b7627b64843e73e9b2f58f42b9",
             index: 0n,
           },
           depType: "code",

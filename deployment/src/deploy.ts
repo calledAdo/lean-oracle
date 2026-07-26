@@ -4,7 +4,10 @@ import type {
   DeploymentAction,
   DeploymentContext,
 } from "./types.js";
-import { deployCodeScript } from "./codeDeploy.js";
+import {
+  deployCodeScript,
+  verifyCodeDeploymentCandidate,
+} from "./codeDeploy.js";
 import { readCodeDeploymentArtifact } from "./artifacts.js";
 import { deployGuardianSetStateCell } from "./guardianSetDeploy.js";
 import { rotateGuardianSetStateCell } from "./guardianSetRotate.js";
@@ -114,10 +117,13 @@ export async function runDeploymentAction(
   }
 }
 
-function promoteCodeDeployment(
-  ctx: Pick<DeploymentContext, "paths" | "network">,
+async function promoteCodeDeployment(
+  ctx: Pick<
+    DeploymentContext,
+    "network" | "config" | "env" | "paths"
+  >,
   scriptFamily: CodeDeploymentScriptFamily,
-): CodeDeploymentArtifact {
+): Promise<CodeDeploymentArtifact> {
   const existing = readCodeDeploymentArtifact({
     deploymentRoot: ctx.paths.deploymentRoot,
     network: ctx.network,
@@ -135,6 +141,12 @@ function promoteCodeDeployment(
       `No latestCandidate to promote for ${ctx.network}.${scriptFamily}`,
     );
   }
+
+  await verifyCodeDeploymentCandidate({
+    ctx,
+    scriptFamily,
+    candidate: artifact.latestCandidate,
+  });
 
   const versions = artifact.versions ?? {};
   const existingVersions = Object.keys(versions)

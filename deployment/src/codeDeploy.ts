@@ -63,6 +63,101 @@ function resolveBinaryPath(
   return path.resolve(repoRoot, rel);
 }
 
+type CodeCandidateVerificationClient = Pick<
+  ccc.Client,
+  "getTransaction" | "getCellLive"
+>;
+
+/** Verify every condition required before a code candidate becomes canonical. */
+export async function assertCodeDeploymentCandidatePromotable(params: {
+  candidate: CodeDeploymentCandidate;
+  localBinary: ccc.BytesLike;
+  client: CodeCandidateVerificationClient;
+}): Promise<void> {
+  const { candidate, client } = params;
+  if (candidate.mode !== "broadcast") {
+    throw new Error("Code promotion requires a broadcast candidate");
+  }
+  if (candidate.hashType !== "data2" || candidate.depType !== "code") {
+    throw new Error("Code promotion requires data2/code deployment policy");
+  }
+  if (
+    !candidate.txHash ||
+    candidate.index === undefined ||
+    !candidate.typeIdArgs
+  ) {
+    throw new Error(
+      "Code promotion requires candidate txHash, index, and Type ID args",
+    );
+  }
+
+  const localCodeHash = ccc.hashCkb(params.localBinary);
+  if (localCodeHash !== candidate.codeHash) {
+    throw new Error(
+      `Candidate code hash ${candidate.codeHash} does not match local release binary ${localCodeHash}`,
+    );
+  }
+
+  const committed = await client.getTransaction(candidate.txHash);
+  if (committed?.status !== "committed") {
+    throw new Error(
+      `Candidate transaction ${candidate.txHash} is not committed (status ${committed?.status ?? "unknown"})`,
+    );
+  }
+
+  const live = await client.getCellLive(
+    { txHash: candidate.txHash, index: BigInt(candidate.index) },
+    true,
+    true,
+  );
+  if (!live) {
+    throw new Error("Candidate code cell is not live at its recorded outpoint");
+  }
+  const chainDataHash = ccc.hashCkb(ccc.bytesFrom(live.outputData));
+  if (chainDataHash !== candidate.codeHash) {
+    throw new Error(
+      `Candidate live-cell data hash ${chainDataHash} does not match ${candidate.codeHash}`,
+    );
+  }
+
+  const type = live.cellOutput.type;
+  if (
+    !type ||
+    type.codeHash !== TYPE_ID_CODE_HASH ||
+    type.hashType !== "type" ||
+    type.args !== candidate.typeIdArgs
+  ) {
+    throw new Error("Candidate code cell does not carry the recorded Type ID");
+  }
+  if (
+    candidate.capacity !== undefined &&
+    live.cellOutput.capacity !== BigInt(candidate.capacity)
+  ) {
+    throw new Error("Candidate code-cell capacity does not match its artifact");
+  }
+}
+
+/** Resolve local and chain state, then enforce the promotion gate. */
+export async function verifyCodeDeploymentCandidate(params: {
+  ctx: Pick<DeploymentContext, "network" | "config" | "env" | "paths">;
+  scriptFamily: CodeDeploymentScriptFamily;
+  candidate: CodeDeploymentCandidate;
+}): Promise<void> {
+  const localBinary = fs.readFileSync(
+    resolveBinaryPath(params.scriptFamily, params.ctx),
+  );
+  const client = createCccClient(
+    params.ctx.network,
+    params.ctx.env.rpcUrl,
+    params.ctx.env,
+  );
+  await assertCodeDeploymentCandidatePromotable({
+    candidate: params.candidate,
+    localBinary,
+    client,
+  });
+}
+
 export async function deployCodeScript(
   params: DeployCodeScriptParams,
 ): Promise<CodeDeploymentCandidate> {

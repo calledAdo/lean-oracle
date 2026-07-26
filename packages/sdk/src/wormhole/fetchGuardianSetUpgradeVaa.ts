@@ -75,9 +75,12 @@ interface WormholescanVaaRow {
  */
 export function wormholescanUpgradeVaaFetcher(
   options?: FetchGuardianSetUpgradeVaaOptions,
-): (currentIndex: number) => Promise<HexString | null> {
-  return (currentIndex: number) =>
-    fetchGuardianSetUpgradeVaa(currentIndex + 1, options);
+): (currentIndex: number, signal?: AbortSignal) => Promise<HexString | null> {
+  return (currentIndex: number, signal?: AbortSignal) =>
+    fetchGuardianSetUpgradeVaa(currentIndex + 1, {
+      ...options,
+      signal: signal ?? options?.signal,
+    });
 }
 
 /**
@@ -103,6 +106,10 @@ export async function fetchGuardianSetUpgradeVaa(
   if (typeof doFetch !== "function") {
     throw new LeanOracleSdkError("No fetch implementation available");
   }
+  const parseOptions = {
+    expectedEmitterChain: chain,
+    expectedEmitterAddress: `0x${emitter}` as HexString,
+  };
 
   let historyError: unknown;
   try {
@@ -129,7 +136,7 @@ export async function fetchGuardianSetUpgradeVaa(
           continue;
         }
         try {
-          const upgrade = parseGuardianSetUpgradeVaa(bytes);
+          const upgrade = parseGuardianSetUpgradeVaa(bytes, parseOptions);
           if (upgrade.newIndex === targetNewIndex) {
             return bytesToHex(bytes);
           }
@@ -166,7 +173,7 @@ export async function fetchGuardianSetUpgradeVaa(
       }
       try {
         const vaa = `0x${encoded}` as HexString;
-        if (parseGuardianSetUpgradeVaa(vaa).newIndex === targetNewIndex) {
+        if (parseGuardianSetUpgradeVaa(vaa, parseOptions).newIndex === targetNewIndex) {
           return vaa.toLowerCase() as HexString;
         }
       } catch {

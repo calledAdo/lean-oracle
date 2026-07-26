@@ -49,26 +49,26 @@ const guardianVersions =
   leanOracleTestnetPreset.deployment.guardianSetTypeVersions;
 assert.ok(guardianVersions, "testnet preset must carry guardianSetTypeVersions");
 assert.deepEqual(
-  guardianVersions[2],
+  guardianVersions[3],
   leanOracleTestnetPreset.deployment.guardianSetType,
-  "guardian v2 history entry must equal the canonical guardianSetType",
+  "guardian v3 deployment entry must equal the canonical guardianSetType",
 );
 assert.equal(
   guardianVersions[1].codeHash,
   "0x57bddf3d57ea45c88ab68d0de706bbaecd68895fd6062b099626deb157100119",
 );
 assert.equal(
-  guardianVersions[2].codeHash,
+  guardianVersions[3].codeHash,
   "0x7ab8c7d225c0e74ecb01b58f8c7a13e298df08460d0947b776b2e47cd5525782",
 );
 assert.equal(
-  guardianVersions[2].args,
+  guardianVersions[3].args,
   "0x4767b1c0444b9206234622869b1205d1acac2b492c34c52e59af14278002a734",
 );
-assert.deepEqual(guardianVersions[2].codeDep, {
+assert.deepEqual(guardianVersions[3].codeDep, {
   outPoint: {
     txHash:
-      "0xfd256c6dbd3b0e2be05cb6f3cbe1f2a0aa2102bb1c1aa63ddeacd670d19b5524",
+      "0x0903144bfb3a736d1a989783d0e6304c153bb5b7627b64843e73e9b2f58f42b9",
     index: 0n,
   },
   depType: "code",

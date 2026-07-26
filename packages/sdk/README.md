@@ -334,10 +334,11 @@ history (or `undefined` for an inert preset like mainnet before launch).
 has no version history or the requested version is absent.
 
 The testnet guardian script was upgraded once to add on-chain verification of
-Wormhole `GuardianSetUpgrade` VAAs. Its immutable v1 and v2 identities are
-recorded under `deployment.guardianSetTypeVersions`; the canonical
-`guardianSetType` is v2 and its live state is set 7. Ordinary future guardian
-rotations happen in place via `set_index` without another `codeHash` change.
+Wormhole `GuardianSetUpgrade` VAAs. Its immutable v1 and governance-v2
+identities are recorded under `deployment.guardianSetTypeVersions`; deployment
+entry v3 is the current Type ID-protected code dep for the same v2 identity,
+and its live state is set 7. Ordinary future guardian rotations happen in place
+via `set_index` without another `codeHash` change.
 
 The v2 type script makes the rotation authorization cryptographic, but the
 current testnet guardian cell is still deployer-locked. A keeper can build the

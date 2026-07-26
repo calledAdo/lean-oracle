@@ -83,6 +83,26 @@ const baseOptions = {
   );
 }
 
+// Documented emitter overrides must be used for parsing as well as the URL.
+{
+  const mutated = Buffer.from(officialV7, "hex");
+  const bodyOffset = 6 + mutated[5] * 66;
+  mutated.fill(0x11, bodyOffset + 10, bodyOffset + 42);
+  const alternateEmitter = `0x${"11".repeat(32)}`;
+  const fetchImpl = async (url) =>
+    String(url).startsWith("https://history.invalid/")
+      ? jsonResponse({ data: [{ vaa: mutated.toString("base64") }] })
+      : textResponse("");
+  assert.equal(
+    await fetchGuardianSetUpgradeVaa(7, {
+      ...baseOptions,
+      emitterAddress: alternateEmitter,
+      fetchImpl,
+    }),
+    `0x${mutated.toString("hex")}`,
+  );
+}
+
 // Successfully exhausting both sources is a clean no-op for keepers.
 {
   const fetchImpl = async (url) =>

@@ -8,9 +8,10 @@
  * new set). This module consumes the current guardian-set cell and produces the
  * next one, attaching the Wormhole guardian-set-upgrade governance VAA in the
  * group input's witness. The `guardian_set_script` verifies that VAA against the
- * **current** on-chain set, so the rotation is permissionless — anyone can land
- * it the moment Wormhole publishes the upgrade. See
- * `contracts/common/src/governance.rs`.
+ * **current** on-chain set, so governance authorization is permissionless.
+ * Transaction submission still has to satisfy the guardian cell's lock. See
+ * `contracts/common/src/governance.rs`; deployments using an operator lock
+ * remain operator-submitted.
  */
 
 import type { Cell, Client, Transaction } from "@ckb-ccc/core";
@@ -28,6 +29,14 @@ import {
 
 /** 1 CKB in shannons; occupied capacity is 1 CKB per data byte. */
 const SHANNONS_PER_CKB = 100_000_000n;
+
+function assertNotAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw new LeanOracleSdkError("Guardian-set rotation aborted", {
+      cause: signal.reason,
+    });
+  }
+}
 
 export interface GuardianSetRotationParams {
   network: LeanOracleNetworkConfig;
@@ -60,6 +69,7 @@ async function resolveLiveGuardianSetCell(
   network: LeanOracleNetworkConfig,
   signal?: AbortSignal,
 ): Promise<Cell> {
+  assertNotAborted(signal);
   const identity = network.deployment.guardianSetType;
   const guardianTypeScript = Script.from({
     codeHash: identity.codeHash,
@@ -86,6 +96,7 @@ async function resolveLiveGuardianSetCell(
       "No live guardian-set cell found for the configured guardian type script",
     );
   }
+  assertNotAborted(signal);
   return matched;
 }
 
@@ -118,6 +129,7 @@ async function attachResolvedGuardianSetRotation(
   currentSet: LeanOracleGuardianSetData,
 ): Promise<GuardianSetRotationResult> {
   const { network, tx } = params;
+  assertNotAborted(params.signal);
 
   // Parse the governance VAA and check it succeeds the current set.
   const upgrade = parseGuardianSetUpgradeVaa(
@@ -149,6 +161,7 @@ async function attachResolvedGuardianSetRotation(
   const outputCapacity = cell.cellOutput.capacity + growth * SHANNONS_PER_CKB;
 
   // Mutate tx: input, output, code dep, witness.
+  assertNotAborted(params.signal);
   const inputIndex =
     tx.addInput({ previousOutput: cell.outPoint }) - 1;
 
@@ -198,6 +211,7 @@ export interface BuildGuardianSetRotationIfBehindParams {
    */
   fetchUpgradeVaa: (
     currentIndex: number,
+    signal?: AbortSignal,
   ) => Promise<HexString | Uint8Array | null>;
   parseOptions?: ParseGuardianSetUpgradeOptions;
   signal?: AbortSignal;
@@ -216,6 +230,7 @@ export interface BuildGuardianSetRotationIfBehindParams {
 export async function buildGuardianSetRotationIfBehind(
   params: BuildGuardianSetRotationIfBehindParams,
 ): Promise<GuardianSetRotationPlan> {
+  assertNotAborted(params.signal);
   const cell = await resolveLiveGuardianSetCell(
     params.cccClient,
     params.network,
@@ -223,7 +238,12 @@ export async function buildGuardianSetRotationIfBehind(
   );
   const currentSet = decodeGuardianSetCellDataHex(cell.outputData);
 
-  const vaa = await params.fetchUpgradeVaa(currentSet.setIndex);
+  assertNotAborted(params.signal);
+  const vaa = await params.fetchUpgradeVaa(
+    currentSet.setIndex,
+    params.signal,
+  );
+  assertNotAborted(params.signal);
   if (!vaa) {
     return { rotated: false, currentIndex: currentSet.setIndex };
   }
