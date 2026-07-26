@@ -61,6 +61,15 @@ const guardianCodeDep = {
   outPoint: { txHash: `0x${"44".repeat(32)}`, index: 0n },
   depType: "code",
 };
+const guardianBindLockDep = {
+  outPoint: { txHash: `0x${"45".repeat(32)}`, index: 0n },
+  depType: "code",
+};
+const guardianBindLock = ccc.Script.from({
+  codeHash: `0x${"66".repeat(32)}`,
+  hashType: "data2",
+  args: `0x${"77".repeat(32)}`,
+});
 const network = {
   name: "testnet",
   hermesBaseUrl: "https://hermes.invalid",
@@ -72,17 +81,17 @@ const network = {
       args: GUARDIAN_ARGS,
       codeDep: guardianCodeDep,
     },
+    guardianSetLock: {
+      script: guardianBindLock,
+      codeDep: guardianBindLockDep,
+    },
   },
 };
 const guardianCell = {
   outPoint: { txHash: `0x${"55".repeat(32)}`, index: 0n },
   cellOutput: {
     capacity: 52_600_000_000n,
-    lock: ccc.Script.from({
-      codeHash: `0x${"66".repeat(32)}`,
-      hashType: "type",
-      args: `0x${"77".repeat(20)}`,
-    }),
+    lock: guardianBindLock,
     type: guardianType,
   },
   outputData: ccc.hexFrom(
@@ -146,6 +155,7 @@ function hasDep(tx, expected) {
   assert.equal(tx.getWitnessArgsAt(0).lock, "0x1234");
   assert.equal(tx.getWitnessArgsAt(1).inputType, officialV7);
   assert.ok(hasDep(tx, guardianCodeDep.outPoint));
+  assert.ok(hasDep(tx, guardianBindLockDep.outPoint));
   assert.equal(tx.outputs[0].capacity, guardianCell.cellOutput.capacity);
   assert.deepEqual(decodeGuardianSetCellDataHex(tx.outputsData[0]), {
     setIndex: 7,
@@ -163,6 +173,28 @@ await assert.rejects(
       governanceVaa: officialV7,
     }),
   LeanOracleSdkError,
+);
+await assert.rejects(
+  () =>
+    attachGuardianSetRotation({
+      network,
+      cccClient: fakeClient([
+        {
+          ...guardianCell,
+          cellOutput: {
+            ...guardianCell.cellOutput,
+            lock: ccc.Script.from({
+              codeHash: `0x${"99".repeat(32)}`,
+              hashType: "type",
+              args: "0x",
+            }),
+          },
+        },
+      ]),
+      tx: ccc.Transaction.from({}),
+      governanceVaa: officialV7,
+    }),
+  /guardian.*lock.*mismatch/iu,
 );
 await assert.rejects(
   () =>

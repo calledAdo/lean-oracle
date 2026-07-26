@@ -131,6 +131,21 @@ async function attachResolvedGuardianSetRotation(
   const { network, tx } = params;
   assertNotAborted(params.signal);
 
+  const guardianSetLock = network.deployment.guardianSetLock;
+  if (guardianSetLock) {
+    const expectedLock = Script.from({
+      codeHash: guardianSetLock.script.codeHash,
+      hashType: guardianSetLock.script.hashType,
+      args: guardianSetLock.script.args ?? "0x",
+    });
+    const liveLock = Script.from(cell.cellOutput.lock);
+    if (!liveLock.eq(expectedLock)) {
+      throw new LeanOracleSdkError(
+        "Guardian-set lock mismatch: the live cell does not use the configured canonical guardian lock",
+      );
+    }
+  }
+
   // Parse the governance VAA and check it succeeds the current set.
   const upgrade = parseGuardianSetUpgradeVaa(
     params.governanceVaa,
@@ -176,6 +191,9 @@ async function attachResolvedGuardianSetRotation(
 
   // The guardian type script must execute to validate the transition.
   tx.addCellDeps(network.deployment.guardianSetType.codeDep);
+  if (guardianSetLock) {
+    tx.addCellDeps(guardianSetLock.codeDep);
+  }
 
   // The script reads the governance VAA from WitnessArgs.input_type at the
   // group input's index (group input 0 == this input).
