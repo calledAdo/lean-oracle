@@ -36,6 +36,7 @@ export {
 } from "./presets/alwaysSuccessCcc.js";
 export { leanOracleMainnetPreset } from "./presets/mainnet.js";
 export { leanOracleTestnetPreset } from "./presets/testnet.js";
+export { requireLeanOracleNetworkConfig } from "./types/network.js";
 
 // ── Errors (core public; Hermes-specific errors live under `./hermes`) ───────
 export {

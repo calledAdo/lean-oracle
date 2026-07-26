@@ -22,6 +22,9 @@ export {
   leanOracleLatestOracleVersion,
 } from "./oracleVersion.js";
 export type {
+  LeanOracleNetwork,
   LeanOracleNetworkConfig,
+  LeanOracleNetworkEndpoints,
   LeanOracleNetworkName,
+  LeanOracleUnavailableNetworkConfig,
 } from "../types/network.js";

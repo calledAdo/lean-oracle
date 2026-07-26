@@ -26,7 +26,7 @@ import type {
   HermesBinaryEncoding,
   HermesBinaryUpdateEnvelope,
 } from "../types/hermes.js";
-import type { LeanOracleNetworkConfig } from "../types/network.js";
+import type { LeanOracleNetworkEndpoints } from "../types/network.js";
 
 // ─── Public surface ─────────────────────────────────────────────────────────────
 
@@ -37,7 +37,7 @@ import type { LeanOracleNetworkConfig } from "../types/network.js";
  */
 export interface HermesUrlQueryOptions {
   /**
-   * Temporarily replaces {@link LeanOracleNetworkConfig.hermesBaseUrl}.
+   * Temporarily replaces {@link LeanOracleNetworkEndpoints.hermesBaseUrl}.
    */
   hermesBaseUrlOverride?: string;
 
@@ -315,7 +315,7 @@ const DEFAULT_ERROR_SNIPPET_LEN = 2048;
  * @public
  */
 export async function fetchHermesLatestPriceUpdates(
-  network: LeanOracleNetworkConfig,
+  network: LeanOracleNetworkEndpoints,
   feedIds: readonly FeedIdHex[],
   options?: FetchHermesLatestOptions,
 ): Promise<HermesBinaryUpdateEnvelope> {
@@ -354,7 +354,7 @@ export async function fetchHermesLatestPriceUpdates(
  * @public
  */
 export async function fetchHermesPriceUpdatesAtPublishTime(
-  network: LeanOracleNetworkConfig,
+  network: LeanOracleNetworkEndpoints,
   feedIds: readonly FeedIdHex[],
   publishTimeUnix: bigint,
   options?: FetchHermesLatestOptions,
@@ -396,7 +396,7 @@ export async function fetchHermesPriceUpdatesAtPublishTime(
  * @public
  */
 export function buildHermesSseStreamUrl(
-  network: LeanOracleNetworkConfig,
+  network: LeanOracleNetworkEndpoints,
   feedIds: readonly FeedIdHex[],
   options?: HermesUrlQueryOptions,
 ): URL {

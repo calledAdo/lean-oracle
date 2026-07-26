@@ -9,6 +9,7 @@ import {
   LeanOracleMainnetClient,
 } from "../dist/client/presets.js";
 import { leanOracleTestnetPreset } from "../dist/presets/testnet.js";
+import { LeanOracleSdkError } from "../dist/errors.js";
 
 const fakeCcc = { __fake: true };
 
@@ -50,6 +51,28 @@ const fakeCcc = { __fake: true };
 {
   const oracle = new LeanOracleMainnetClient({ cccClient: fakeCcc });
   assert.strictEqual(oracle.cccClient, fakeCcc);
+}
+
+// 7. Mainnet CKB operations reject before issuing indexer/RPC work.
+{
+  let findCalls = 0;
+  const countingCcc = {
+    findCells() {
+      findCalls += 1;
+      return (async function* emptyCells() {})();
+    },
+  };
+  const oracle = new LeanOracleMainnetClient({ cccClient: countingCcc });
+  await assert.rejects(
+    () =>
+      oracle.getOracleCellState({
+        feedId:
+          "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",
+      }),
+    (err) =>
+      err instanceof LeanOracleSdkError && /not deployed.*mainnet/i.test(err.message),
+  );
+  assert.equal(findCalls, 0, "unavailable deployment must fail before CKB discovery");
 }
 
 console.log("clientCccInjection.fixture.mjs: PASS");

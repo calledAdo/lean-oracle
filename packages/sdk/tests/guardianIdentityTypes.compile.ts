@@ -4,6 +4,7 @@ import type {
   LeanOracleGuardianSetIdentityRef,
 } from "../src/types/deployment.js";
 import type { HexString } from "../src/types/hex.js";
+import type { LeanOracleUnavailableNetworkConfig } from "../src/types/network.js";
 
 const hex32 = (byte: string): HexString =>
   `0x${byte.repeat(32)}` as HexString;
@@ -58,3 +59,13 @@ const deployment = {
 } satisfies LeanOracleDeployment;
 
 void deployment;
+
+const unavailableMainnet = {
+  name: "mainnet",
+  hermesBaseUrl: "https://hermes.pyth.network",
+  ckbJsonRpcUrl: "https://mainnet.ckb.dev",
+  deploymentStatus: "unavailable",
+  deploymentUnavailableReason: "Lean Oracle is not deployed on CKB mainnet",
+} satisfies LeanOracleUnavailableNetworkConfig;
+
+void unavailableMainnet;

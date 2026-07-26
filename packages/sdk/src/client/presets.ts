@@ -12,7 +12,7 @@ import {
   leanOracleMainnetPreset,
   leanOracleTestnetPreset,
 } from "../presets/index.js";
-import type { LeanOracleNetworkConfig } from "../types/network.js";
+import type { LeanOracleNetwork } from "../types/network.js";
 import { LeanOracleClient } from "./LeanOracleClient.js";
 
 /** @public */
@@ -27,16 +27,15 @@ export interface LeanOraclePresetClientOverrides {
   ckbJsonRpcUrl?: string;
 }
 
-function mergeNetwork(
-  base: LeanOracleNetworkConfig,
+function mergeNetwork<T extends LeanOracleNetwork>(
+  base: T,
   overrides?: LeanOraclePresetClientOverrides,
-): LeanOracleNetworkConfig {
+): T {
   return {
     ...base,
     hermesBaseUrl: overrides?.hermesBaseUrl ?? base.hermesBaseUrl,
     ckbJsonRpcUrl: overrides?.ckbJsonRpcUrl ?? base.ckbJsonRpcUrl,
-    deployment: base.deployment,
-  };
+  } as T;
 }
 
 /**

@@ -183,17 +183,20 @@ assert.throws(
 );
 console.log(`${FILE}: unknown-version throws PASS`);
 
-// ── ⑤ Inert mainnet preset has no version history; helper throws clearly
+// ── ⑤ Undeployed mainnet carries no fake on-chain deployment metadata
+assert.equal(leanOracleMainnetPreset.deploymentStatus, "unavailable");
+assert.equal("deployment" in leanOracleMainnetPreset, false);
+assert.match(leanOracleMainnetPreset.deploymentUnavailableReason, /not deployed/i);
 assert.equal(
   leanOracleLatestOracleVersion(leanOracleMainnetPreset),
   undefined,
-  "mainnet preset (inert) should report no version history",
+  "undeployed mainnet should report no oracle version history",
 );
 assert.throws(
   () => leanOraclePresetForOracleVersion(leanOracleMainnetPreset, 1),
   (err) =>
-    err instanceof LeanOracleSdkError && /no oracleTypeVersions/.test(err.message),
+    err instanceof LeanOracleSdkError && /not deployed.*mainnet/i.test(err.message),
 );
-console.log(`${FILE}: mainnet-inert PASS`);
+console.log(`${FILE}: mainnet-unavailable PASS`);
 
 console.log(`${FILE}: PASS`);

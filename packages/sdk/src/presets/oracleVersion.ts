@@ -1,5 +1,9 @@
 import { LeanOracleSdkError } from "../errors.js";
-import type { LeanOracleNetworkConfig } from "../types/network.js";
+import {
+  requireLeanOracleNetworkConfig,
+  type LeanOracleNetwork,
+  type LeanOracleNetworkConfig,
+} from "../types/network.js";
 
 /**
  * Return a copy of `config` whose `deployment.oracleType` is swapped for the
@@ -28,10 +32,11 @@ import type { LeanOracleNetworkConfig } from "../types/network.js";
  * @public
  */
 export function leanOraclePresetForOracleVersion(
-  config: LeanOracleNetworkConfig,
+  config: LeanOracleNetwork,
   version: number,
 ): LeanOracleNetworkConfig {
-  const versions = config.deployment.oracleTypeVersions;
+  const availableConfig = requireLeanOracleNetworkConfig(config);
+  const versions = availableConfig.deployment.oracleTypeVersions;
   if (!versions) {
     throw new LeanOracleSdkError(
       `Network config "${config.name}" has no oracleTypeVersions; cannot pin to version ${String(version)}`,
@@ -45,9 +50,9 @@ export function leanOraclePresetForOracleVersion(
     );
   }
   return {
-    ...config,
+    ...availableConfig,
     deployment: {
-      ...config.deployment,
+      ...availableConfig.deployment,
       oracleType: ref,
     },
   };
@@ -61,8 +66,9 @@ export function leanOraclePresetForOracleVersion(
  * @public
  */
 export function leanOracleLatestOracleVersion(
-  config: LeanOracleNetworkConfig,
+  config: LeanOracleNetwork,
 ): number | undefined {
+  if (config.deploymentStatus === "unavailable") return undefined;
   const versions = config.deployment.oracleTypeVersions;
   if (!versions) return undefined;
   const keys = Object.keys(versions)

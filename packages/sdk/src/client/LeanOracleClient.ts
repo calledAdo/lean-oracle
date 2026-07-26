@@ -14,7 +14,10 @@ import type {
   HermesBinaryUpdateEnvelope,
   OracleUpdateOutputSource,
 } from "../types/hermes.js";
-import type { LeanOracleNetworkConfig } from "../types/network.js";
+import {
+  requireLeanOracleNetworkConfig,
+  type LeanOracleNetwork,
+} from "../types/network.js";
 import {
   initiateOracleUpdateTx,
   initiateReadOracleTx,
@@ -34,7 +37,7 @@ export interface LeanOracleCellStateResult {
 
 /** @public */
 export interface LeanOracleClientOptions {
-  network: LeanOracleNetworkConfig;
+  network: LeanOracleNetwork;
   /**
    * Optional preconfigured CCC `Client`. When omitted, the SDK constructs a
    * public client from `network.ckbJsonRpcUrl` (`ClientPublicMainnet` for
@@ -60,7 +63,7 @@ export interface LeanOracleClientOptions {
  * @public
  */
 export class LeanOracleClient {
-  readonly network: LeanOracleNetworkConfig;
+  readonly network: LeanOracleNetwork;
   readonly cccClient: Client;
 
   constructor(options: LeanOracleClientOptions) {
@@ -100,11 +103,12 @@ export class LeanOracleClient {
     oracleLockScript?: ScriptLike;
     minPublishTimeUnix?: bigint;
   }): Promise<LeanOracleCellStateResult | undefined> {
+    const network = requireLeanOracleNetworkConfig(this.network);
     const live = await findLatestOracleLiveCellForFeed(
       this.cccClient,
       params.feedId,
       {
-        deployment: this.network.deployment,
+        deployment: network.deployment,
         oracleLockScript: params.oracleLockScript,
         minPublishTimeUnix: params.minPublishTimeUnix,
       },
@@ -130,8 +134,9 @@ export class LeanOracleClient {
     oracleLockScript?: ScriptLike;
     minPublishTimeUnix?: bigint;
   }) {
+    const network = requireLeanOracleNetworkConfig(this.network);
     return initiateReadOracleTx({
-      network: this.network,
+      network,
       cccClient: this.cccClient,
       feedId: params.feedId,
       oracleLockScript: params.oracleLockScript,
@@ -158,8 +163,9 @@ export class LeanOracleClient {
     hermesEnvelope?: HermesBinaryUpdateEnvelope;
     outputSource?: OracleUpdateOutputSource;
   }) {
+    const network = requireLeanOracleNetworkConfig(this.network);
     return initiateOracleUpdateTx({
-      network: this.network,
+      network,
       cccClient: this.cccClient,
       feedId: params.feedId,
       oracleLockScript: params.oracleLockScript,

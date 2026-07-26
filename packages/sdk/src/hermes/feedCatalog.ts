@@ -20,7 +20,7 @@ import {
   LeanOracleSdkError,
 } from "../errors.js";
 import type { FeedIdHex } from "../types/hex.js";
-import type { LeanOracleNetworkConfig } from "../types/network.js";
+import type { LeanOracleNetworkEndpoints } from "../types/network.js";
 import { normalizePythFeedId } from "./client.js";
 
 /**
@@ -143,7 +143,7 @@ function parseCatalog(parsedJson: unknown): PythFeedCatalogEntry[] {
  * @public
  */
 export async function fetchPythFeedCatalog(
-  network: LeanOracleNetworkConfig,
+  network: LeanOracleNetworkEndpoints,
   options?: FetchPythFeedCatalogOptions,
 ): Promise<PythFeedCatalogEntry[]> {
   const baseRaw = options?.hermesBaseUrlOverride ?? network.hermesBaseUrl;
@@ -222,7 +222,7 @@ export async function fetchPythFeedCatalog(
  * @public
  */
 export async function findPythFeedIdBySymbol(
-  network: LeanOracleNetworkConfig,
+  network: LeanOracleNetworkEndpoints,
   symbol: string,
   options?: Omit<FetchPythFeedCatalogOptions, "query">,
 ): Promise<PythFeedCatalogEntry | undefined> {
