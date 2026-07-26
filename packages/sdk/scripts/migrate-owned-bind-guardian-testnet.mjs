@@ -592,6 +592,22 @@ async function main() {
   if (!DRY_RUN && !BROADCAST) {
     throw new Error("Broadcast migration requires both DRY_RUN=false and BROADCAST=true");
   }
+  if (fs.existsSync(RECEIPT_PATH)) {
+    const receipt = readArtifact(RECEIPT_PATH, "guardian migration receipt");
+    if (receipt.mode !== "broadcast" || receipt.phase !== "promoted") {
+      throw new Error("Guardian migration receipt is not a completed promotion");
+    }
+    console.log(
+      stringify({
+        mode: DRY_RUN ? "dry-run" : "broadcast",
+        phase: "complete",
+        receipt: RECEIPT_PATH,
+        sendsTransactions: false,
+        writesArtifacts: false,
+      }),
+    );
+    return;
+  }
   if (!fs.existsSync(CANDIDATE_PATH)) {
     const result = {
       mode: DRY_RUN ? "dry-run" : "broadcast",
@@ -687,6 +703,7 @@ async function main() {
       continue;
     }
     if (phase === "promote") {
+      await verifyCandidate(client, progress.guardianCandidate, deployerLock);
       const promotion = buildGuardianMigrationPromotion({
         guardianCandidate: progress.guardianCandidate,
         oldGuardianState: progress.oldGuardianState,

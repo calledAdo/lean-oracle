@@ -180,8 +180,9 @@ export function buildRotatedGuardianCanonicalState(params: {
  * guardian-set-upgrade governance VAA (env `GUARDIAN_UPGRADE_VAA`) in the group
  * input witness. The `guardian_set_script` verifies that VAA against the current
  * on-chain set, so successor authenticity is authorized by cryptography. The
- * current testnet lock separately requires the operator key to submit the CKB
- * transaction.
+ * The canonical testnet identity uses OwnedTypeBindLock, so any fee payer can
+ * submit a continuity-preserving transaction. This deployment command still
+ * uses the configured operator signer as its fee payer.
  */
 export async function rotateGuardianSetStateCell(params: {
   ctx: Pick<DeploymentContext, "network" | "config" | "env" | "paths">;
