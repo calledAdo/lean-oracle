@@ -56,6 +56,25 @@ export interface LeanOracleOracleTypeRef {
 }
 
 /**
+ * Full immutable identity of one guardian-set type-script deployment.
+ *
+ * Unlike oracle scripts, guardian identities include Type ID args because each
+ * code upgrade requires a new singleton state cell.
+ *
+ * @public
+ */
+export interface LeanOracleGuardianSetTypeRef {
+  /** Guardian-set type script code hash. */
+  codeHash: HexString;
+  /** Guardian-set type script hash type. */
+  hashType: LeanOracleScriptHashType;
+  /** Type ID args identifying the singleton guardian state cell. */
+  args: HexString;
+  /** Code cell dependency for this guardian-set implementation. */
+  codeDep: LeanOracleCodeDep;
+}
+
+/**
  * Canonical testnet/mainnet oracle + guardian artefacts once contracts are pinned.
  *
  * @public
@@ -117,21 +136,16 @@ export interface LeanOracleDeployment {
     address: HexString;
   };
 
-  guardianSetType: {
-    /** Guardian-set type script code hash. */
-    codeHash: HexString;
-    /** Guardian-set type script hash type. */
-    hashType: LeanOracleScriptHashType;
-    /**
-     * Type script args for the guardian-set cell.
-     * Defaults to `"0x"` when omitted.
-     */
-    args: HexString;
-    /**
-     * Code cell dependency for the guardian-set **type script** implementation.
-     */
-    codeDep: LeanOracleCodeDep;
-  };
+  guardianSetType: LeanOracleGuardianSetTypeRef;
+
+  /**
+   * Optional guardian-set script history keyed by deployment version.
+   *
+   * The latest entry equals {@link guardianSetType}. Older entries describe
+   * immutable legacy singleton cells and are retained for inspection and
+   * explicit migration tooling; normal oracle updates use the latest entry.
+   */
+  guardianSetTypeVersions?: Record<number, LeanOracleGuardianSetTypeRef>;
 }
 
 /**

@@ -160,6 +160,7 @@ list at <https://www.pyth.network/developers/price-feed-ids>.
   cell data: 12-byte LE header `set_index`, `quorum`, `guardian_count`, then
   `guardian_count` × 20-byte addresses; no lifecycle timestamps)
 - `tx/` — transaction pipelines and building workflows
+- `wormhole/` — guardian upgrade VAA parsing and canonical-registry fetching
 - `presets/` — network configuration presets, CCC lock preset wiring, and
   oracle-type code-version helpers
 - `witness/` — oracle update witness encoding
@@ -195,6 +196,21 @@ import type {
 } from "lean-oracle-sdk/hermes";
 ```
 
+Guardian rotation parsing and transport live under `/wormhole`; transaction
+attachment and keeper planning remain under `/tx`:
+
+```ts
+import {
+  fetchGuardianSetUpgradeVaa,
+  parseGuardianSetUpgradeVaa,
+  wormholeQuorum,
+} from "lean-oracle-sdk/wormhole";
+import {
+  attachGuardianSetRotation,
+  buildGuardianSetRotationIfBehind,
+} from "lean-oracle-sdk/tx";
+```
+
 Lower-level helpers (witness encoders, transaction-mutation primitives,
 fee/fuel rebalancing, guardian-dep resolution, output construction) are
 **explicit subpath imports**:
@@ -218,8 +234,8 @@ import {
 } from "lean-oracle-sdk/advanced";
 ```
 
-Available subpaths: `./ckb`, `./tx`, `./fuel`, `./hermes`, `./presets`,
-`./advanced`.
+Available subpaths: `./ckb`, `./tx`, `./fuel`, `./hermes`, `./wormhole`,
+`./presets`, `./advanced`.
 
 ### Reading the latest oracle state
 
@@ -291,9 +307,13 @@ The bundled presets carry their full code-version history under
 `deployment.oracleTypeVersions` (a map keyed by version number, mirroring
 `deployment/artifacts/<network>.oracle-type.json#versions`). The latest entry
 equals `deployment.oracleType`, which is what discovery, update, deploy, and
-burn use by default — this map does **not** change default behaviour. To
-operate on a cell created under a prior code version, build a config pinned to
-that version with `leanOraclePresetForOracleVersion`:
+burn use by default — this map does **not** change default behaviour. The
+current testnet default is oracle v4. It preserves v3's zero-initialized
+creation behavior; the new code identity makes the build reproducible after
+guardian governance was added to the shared contract crate.
+
+To operate on a cell created under a prior code version, build a config pinned
+to that version with `leanOraclePresetForOracleVersion`:
 
 ```ts
 import {
@@ -313,10 +333,16 @@ history (or `undefined` for an inert preset like mainnet before launch).
 `leanOraclePresetForOracleVersion` throws a `LeanOracleSdkError` if the config
 has no version history or the requested version is absent.
 
-Upgrades to the `oracle_type` script are expected to be rare — guardian-set
-rotation happens in place via `set_index`, with no `codeHash` change — so this
-only matters when a contract fix forces a redeploy and you still hold cells
-from the prior version.
+The testnet guardian script was upgraded once to add on-chain verification of
+Wormhole `GuardianSetUpgrade` VAAs. Its immutable v1 and v2 identities are
+recorded under `deployment.guardianSetTypeVersions`; the canonical
+`guardianSetType` is v2 and its live state is set 7. Ordinary future guardian
+rotations happen in place via `set_index` without another `codeHash` change.
+
+The v2 type script makes the rotation authorization cryptographic, but the
+current testnet guardian cell is still deployer-locked. A keeper can build the
+transaction, while the operator key remains necessary to land it until the
+lock is migrated.
 
 ## Scripts
 

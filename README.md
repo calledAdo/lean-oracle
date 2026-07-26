@@ -167,21 +167,30 @@ feed-id lookup, update-transaction drafting, and devnet integration.
 
 ### Testnet
 
-Guardian set index **6**, quorum **13** (Wormhole mainnet guardians).
+Guardian set index **7**, quorum **13** (Wormhole mainnet guardians).
 
 | Component | Version | Code Hash | Deploy Tx |
 |---|---|---|---|
-| `oracle_type`           | v3 (latest) | `0xb2a48cc368e55269e4bd10a6548a1ff3a18aff7a290927268b42f42ecb197d63` | `0xf794a02d605a1d76cb6610c9c6bb344165f96d1b4bf27e695d7f5ce0c3542d3b` |
+| `oracle_type`           | v4 (latest) | `0x5711c27408e948befdf55cdebf29b6ed0b6c56d8866200dab1dd53f28bef8c55` | `0x797167087bce4fa6b5bb1b6620f4e52bdad86bff28de159a732db0f82440131d` |
+| `oracle_type`           | v3 (legacy) | `0xb2a48cc368e55269e4bd10a6548a1ff3a18aff7a290927268b42f42ecb197d63` | `0xf794a02d605a1d76cb6610c9c6bb344165f96d1b4bf27e695d7f5ce0c3542d3b` |
 | `oracle_type`           | v2 (legacy) | `0x10c9bcc3af00fc3728cb95d5e14ec882716af5f531a010852526ce784f6958ec` | `0x45f033f0944b50be1e5b80f733c321648ddcfdbe0c183477cf0b77bd0f8312b5` |
 | `oracle_type`           | v1 (legacy) | `0x2277560d62a11a92084654b67848ea893fcf3c1880e20a3ce9c0c19d0ee27dc3` | `0xf39d3cb5eccab560bdab65529f4e6f86c2dc8c966a4d49a2fd17bb277e75bba2` |
-| `guardian_set_type`     | v1          | `0x57bddf3d57ea45c88ab68d0de706bbaecd68895fd6062b099626deb157100119` | `0x78f83c3967c566c50c783d45c9165af94d23018c5254228b3eb418aa0c5ac37f` |
-| `owned_type_bind_lock`  | v1          | `0x5554bc20c9f3dbb8d1d7a6591b1b2ceeb0bbee822804635ee168911a440a111c` | `0x982a5d5555ebc855a97d9e71a8ac9de9cefc25a62a44ccfc2b6605758c01ba9f` |
+| `guardian_set_type`     | v2 (latest) | `0x7ab8c7d225c0e74ecb01b58f8c7a13e298df08460d0947b776b2e47cd5525782` | `0xfd256c6dbd3b0e2be05cb6f3cbe1f2a0aa2102bb1c1aa63ddeacd670d19b5524` |
+| `guardian_set_type`     | v1 (legacy) | `0x57bddf3d57ea45c88ab68d0de706bbaecd68895fd6062b099626deb157100119` | `0x78f83c3967c566c50c783d45c9165af94d23018c5254228b3eb418aa0c5ac37f` |
+| `owned_type_bind_lock`  | v2 (live dep; same code) | `0x5554bc20c9f3dbb8d1d7a6591b1b2ceeb0bbee822804635ee168911a440a111c` | `0xff625007fa8ba4ffbbaa97eb57fe70228228655a1fd72acb69e9abfbd1c4e065` |
 
 All values, plus oracle/guardian-set cell outpoints and the full version
 history, are checked in under
 [`deployment/artifacts/testnet.*.json`](deployment/artifacts/). The SDK's
 `leanOracleTestnetPreset` consumes these directly — most consumers do not need
 the hashes by hand.
+
+The live guardian v2 cell is `0x5d756dece38618d904c9617d9f1446d1c15d73b87af961ea72144cde1b600729:0`
+with Type ID args `0x4767b1c0444b9206234622869b1205d1acac2b492c34c52e59af14278002a734`.
+That transaction is also the verified on-chain rotation from set 6 to set 7.
+The current public BTC/USD oracle v4 cell is
+`0xb7dbe963a6cb9e35f920a6290855b705bb0b1f7798ff4a9880f34d2ba345f916:0`;
+its first guardian-set-7 Hermes update committed at testnet block `21874947`.
 
 ### Mainnet
 
@@ -209,7 +218,9 @@ them in CKB-native state:
 
 This implementation uses a **current-set-only** guardian policy. Only the
 active canonical guardian set is accepted. After Wormhole guardian rotation,
-callers must fetch a fresh Hermes update signed by the new active set.
+callers must fetch a fresh Hermes update signed by the new active set. Guardian
+v2 validates the canonical Wormhole `GuardianSetUpgrade` VAA on-chain before
+replacing the active addresses and quorum.
 
 ## Security & Threat Model
 
@@ -235,10 +246,11 @@ callers must fetch a fresh Hermes update signed by the new active set.
 
 **Known boundaries:**
 
-- **Guardian rotation:** the current-set-only policy means that immediately
-  after Wormhole rotates guardians, an update signed by the previous set is
-  rejected. The first update under the new set must rotate the guardian-set
-  cell.
+- **Guardian rotation:** the current-set-only policy means an update signed by
+  the previous set is rejected after the CKB guardian cell rotates. Guardian v2
+  cryptographically validates the Wormhole governance VAA, but the current
+  testnet cell remains deployer-locked, so the operator key must still sign the
+  CKB transaction until a permissionless lock migration is deployed.
 - **No price arbitration:** the oracle stores exactly what Pyth signed. If
   Pyth publishes an aberrant value, Lean Oracle will accept it. Consumers
   should apply deviation/sanity checks if their use case warrants.
@@ -316,6 +328,7 @@ Typical bootstrap order for a network:
 
 ```text
 deploy:guardian-set-type → promote:guardian-set-type → deploy:guardian-set
+rotate:guardian-set       → apply the next canonical governance VAA
 deploy:oracle-type       → promote:oracle-type       → deploy:oracle
 ```
 

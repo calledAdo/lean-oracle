@@ -15,6 +15,36 @@ export interface DeployCodeScriptParams {
   scriptFamily: CodeDeploymentScriptFamily;
 }
 
+/** Consensus-native Type ID script used to keep deployed code cells typed. */
+export const TYPE_ID_CODE_HASH =
+  "0x00000000000000000000000000000000000000000000000000545950455f4944";
+
+/**
+ * Build the single-output code deployment before funding determines Type ID
+ * args. Typed code cells are excluded by normal plain-capacity collection,
+ * which prevents later deployment transactions from consuming their deps.
+ */
+export function buildCodeDeploymentTransaction(params: {
+  lock: ccc.ScriptLike;
+  codeDataHex: string;
+}): ccc.Transaction {
+  const codeBytes = ccc.bytesFrom(params.codeDataHex);
+  const output = ccc.CellOutput.from({
+    lock: params.lock,
+    type: {
+      codeHash: TYPE_ID_CODE_HASH,
+      hashType: "type",
+      args: `0x${"00".repeat(32)}`,
+    },
+    capacity: 0,
+  });
+  output.capacity = ccc.fixedPointFrom(output.occupiedSize + codeBytes.length);
+  return ccc.Transaction.from({
+    outputs: [output],
+    outputsData: [params.codeDataHex],
+  });
+}
+
 function resolveBinaryPath(
   scriptFamily: CodeDeploymentScriptFamily,
   ctx: Pick<DeploymentContext, "config" | "paths">,
@@ -56,20 +86,20 @@ export async function deployCodeScript(
   const codeDataHex = ccc.hexFrom(bytes);
 
   if (dryRun) {
-    const plannedOutput = ccc.CellOutput.from({
+    const planned = buildCodeDeploymentTransaction({
       lock: {
         codeHash: "0x" + "00".repeat(32),
         hashType: "data",
         args: "0x",
       },
-      capacity: 0,
+      codeDataHex,
     });
     return {
       mode: "dry-run",
       codeHash,
       hashType: "data2",
       depType: "code",
-      capacity: ccc.fixedPointFrom(plannedOutput.occupiedSize + bytes.length),
+      capacity: planned.outputs[0]!.capacity,
     };
   }
 
@@ -78,16 +108,12 @@ export async function deployCodeScript(
 
   const { script: lock } = await signer.getRecommendedAddressObj();
 
-  const capacity = ccc.fixedPointFrom(
-    ccc.CellOutput.from({ lock, capacity: 0 }).occupiedSize + bytes.length,
-  );
-
-  const tx = ccc.Transaction.from({
-    outputs: [{ lock, capacity }],
-    outputsData: [codeDataHex],
-  });
+  const tx = buildCodeDeploymentTransaction({ lock, codeDataHex });
+  const capacity = tx.outputs[0]!.capacity;
 
   await tx.completeInputsByCapacity(signer);
+  const typeIdArgs = ccc.hashTypeId(tx.inputs[0]!, 0);
+  tx.outputs[0]!.type!.args = typeIdArgs;
   // offckb devnet may return null fee-rate statistics; provide a deterministic fallback.
   await tx.completeFeeBy(signer, ctx.network === "devnet" ? 1000n : undefined);
 
@@ -101,5 +127,6 @@ export async function deployCodeScript(
     txHash,
     index: 0,
     capacity,
+    typeIdArgs,
   };
 }

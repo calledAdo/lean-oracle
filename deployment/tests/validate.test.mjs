@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { validateConfigPreflight } from "../dist/validate.js";
+import { assertChainBroadcastAuthorized } from "../dist/deploy.js";
 
 function makeRoot() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "lean-oracle-validate-test-"));
@@ -44,6 +45,48 @@ function fakeCodeArtifact(family, versions) {
     deployment: { scriptFamily: family, versions },
   };
 }
+
+test("chain mutations require both DRY_RUN=false and BROADCAST=true", () => {
+  const actions = [
+    "deploy:guardian-set-type",
+    "deploy:oracle-type",
+    "deploy:owned-type-bind-lock",
+    "deploy:guardian-set",
+    "rotate:guardian-set",
+    "deploy:oracle",
+  ];
+  for (const action of actions) {
+    assert.doesNotThrow(() =>
+      assertChainBroadcastAuthorized({
+        action,
+        env: { dryRun: "true", broadcast: "false" },
+      }),
+    );
+    assert.doesNotThrow(() =>
+      assertChainBroadcastAuthorized({
+        action,
+        env: { dryRun: "false", broadcast: "true" },
+      }),
+    );
+    assert.throws(
+      () =>
+        assertChainBroadcastAuthorized({
+          action,
+          env: { dryRun: "false", broadcast: "false" },
+        }),
+      /set both DRY_RUN=false and BROADCAST=true/u,
+    );
+  }
+});
+
+test("local promotions do not require the chain broadcast flag", () => {
+  assert.doesNotThrow(() =>
+    assertChainBroadcastAuthorized({
+      action: "promote:guardian-set-type",
+      env: { dryRun: "false", broadcast: "false" },
+    }),
+  );
+});
 
 test("rejects when target action is missing", () => {
   const root = makeRoot();

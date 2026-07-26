@@ -23,6 +23,10 @@ The deployment flow has two layers:
 
    These create the live guardian-set and oracle state cells using canonical promoted code versions.
 
+Guardian maintenance uses `rotate:guardian-set`. It consumes the current
+guardian cell and applies a Wormhole `GuardianSetUpgrade` VAA verified by the
+guardian v2 type script.
+
 Code deployment artifacts support:
 
 - `latestCandidate` — the most recently deployed code candidate
@@ -38,6 +42,11 @@ Promotion actions move a candidate into the canonical version map:
 Custom Lean Oracle scripts are published as raw code blobs and referenced with:
 
 - `hashType: "data2"`
+
+New code deployments also carry the consensus Type ID script. The data hash
+remains the executable identity, while the Type ID keeps code cells out of
+plain-capacity collection so later operator transactions do not consume live
+dependencies.
 
 This is important. It is the expected script identity for the current Rust / `ckb-std` contract build path.
 
@@ -63,6 +72,7 @@ Examples:
 node --enable-source-maps ./dist/index.js deploy:guardian-set-type --network testnet
 node --enable-source-maps ./dist/index.js promote:guardian-set-type --network testnet
 node --enable-source-maps ./dist/index.js deploy:guardian-set --network testnet
+node --enable-source-maps ./dist/index.js rotate:guardian-set --network testnet
 ```
 
 ## Preflight validation
@@ -105,13 +115,20 @@ Copy `.env.example` to `.env`.
   - defaults to `true`
   - set `DRY_RUN=false` for real broadcasts
 - `BROADCAST`
-  - operator flag kept alongside `DRY_RUN`; use `BROADCAST=true` for explicit real runs
+  - defaults to `false`
+  - chain mutations require `BROADCAST=true` together with `DRY_RUN=false`
 
 ### Required for `deploy:oracle`
 
 - `ORACLE_FEED_ID`
 - `ORACLE_EMITTER_CHAIN`
 - `ORACLE_EMITTER_ADDRESS`
+
+### Required for `rotate:guardian-set`
+
+- `GUARDIAN_UPGRADE_VAA` - the raw governance VAA as hex
+- `GUARDIAN_SET_TYPE_ID_ARGS` - optional override; normally read from the
+  canonical `deploy:guardian-set` artifact
 
 Example:
 
@@ -133,9 +150,10 @@ Run these in order for a given network:
 1. `deploy:guardian-set-type`
 2. `promote:guardian-set-type`
 3. `deploy:guardian-set`
-4. `deploy:oracle-type`
-5. `promote:oracle-type`
-6. `deploy:oracle`
+4. `rotate:guardian-set` when a canonical successor VAA is available
+5. `deploy:oracle-type`
+6. `promote:oracle-type`
+7. `deploy:oracle`
 
 That order matters:
 
@@ -144,13 +162,19 @@ That order matters:
 
 ## Broadcast behavior
 
-When `DRY_RUN=false`, the toolbox performs real chain broadcasts.
+The toolbox performs a real chain broadcast only when both `DRY_RUN=false` and
+`BROADCAST=true`. Local promotion actions update artifacts without broadcasting.
 
 Important current behavior:
 
 - code deployment actions build the contracts first
 - devnet broadcast paths use an explicit fee-rate fallback
 - guardian-set and oracle state cells compute occupied capacity dynamically instead of using fixed placeholder capacities
+- guardian rotation writes both an audit receipt and the advanced canonical
+  guardian-state artifact used by later oracle deployments
+- the current public-testnet guardian cell is deployer-locked, so its operator
+  key must sign rotations even though the v2 type script verifies governance
+  authorization independently
 
 ## Artifacts
 
@@ -166,6 +190,7 @@ Code deployments are stored by:
 State deployments are stored by:
 
 - `<network>.deploy-guardian-set.json`
+- `<network>.rotate-guardian-set.json`
 - `<network>.deploy-oracle.json`
 
 These artifacts are local operator state and are usually gitignored.
@@ -206,4 +231,6 @@ These files define:
 - guardian-set intent
 - network label
 
-The checked-in guardian list currently mirrors the Wormhole Ethereum guardian set at index `6`. Refresh it whenever the upstream guardian set rotates.
+The checked-in testnet guardian list mirrors Wormhole mainnet guardian set `7`
+with quorum `13`. Advance it only with the canonical governance VAA and update
+the config after the on-chain rotation is committed and read back.

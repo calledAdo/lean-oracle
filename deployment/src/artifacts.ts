@@ -93,3 +93,42 @@ export function writeDeploymentArtifact(
   );
   return { artifactPath, envelope };
 }
+
+/**
+ * Write an action receipt and any canonical state projection it advances.
+ * Guardian rotation keeps its audit receipt while replacing the live-state
+ * pointer consumed by later deployment actions.
+ */
+export function writeDeploymentActionArtifacts(
+  deploymentRoot: string,
+  network: DeploymentNetwork,
+  action: DeploymentAction,
+  deployment: unknown,
+): {
+  artifactPath: string;
+  artifactPaths: string[];
+  envelope: DeploymentArtifactEnvelope;
+} {
+  const primary = writeDeploymentArtifact(
+    deploymentRoot,
+    network,
+    action,
+    deployment,
+  );
+  const artifactPaths = [primary.artifactPath];
+
+  if (action === "rotate:guardian-set" && deployment && typeof deployment === "object") {
+    const canonicalState = (deployment as { canonicalState?: unknown }).canonicalState;
+    if (canonicalState !== undefined) {
+      const canonical = writeDeploymentArtifact(
+        deploymentRoot,
+        network,
+        "deploy:guardian-set",
+        canonicalState,
+      );
+      artifactPaths.push(canonical.artifactPath);
+    }
+  }
+
+  return { ...primary, artifactPaths };
+}

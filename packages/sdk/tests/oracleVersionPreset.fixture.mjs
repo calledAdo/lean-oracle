@@ -23,6 +23,15 @@ const versions = leanOracleTestnetPreset.deployment.oracleTypeVersions;
 assert.ok(versions, "testnet preset must carry oracleTypeVersions");
 const latestKey = leanOracleLatestOracleVersion(leanOracleTestnetPreset);
 assert.equal(typeof latestKey, "number");
+assert.equal(latestKey, 4, "oracle v4 must be the canonical reproducible build");
+assert.equal(
+  versions[latestKey].codeHash,
+  "0x5711c27408e948befdf55cdebf29b6ed0b6c56d8866200dab1dd53f28bef8c55",
+);
+assert.equal(
+  versions[latestKey].codeDep.outPoint.txHash,
+  "0x797167087bce4fa6b5bb1b6620f4e52bdad86bff28de159a732db0f82440131d",
+);
 assert.deepEqual(
   versions[latestKey].codeHash,
   leanOracleTestnetPreset.deployment.oracleType.codeHash,
@@ -33,6 +42,46 @@ assert.deepEqual(
   leanOracleTestnetPreset.deployment.oracleType.codeDep,
 );
 console.log(`${FILE}: testnet history shape PASS`);
+
+// The guardian type was redeployed for trustless rotation. Keep the immutable
+// v1 identity available while making the verified v2 state the default.
+const guardianVersions =
+  leanOracleTestnetPreset.deployment.guardianSetTypeVersions;
+assert.ok(guardianVersions, "testnet preset must carry guardianSetTypeVersions");
+assert.deepEqual(
+  guardianVersions[2],
+  leanOracleTestnetPreset.deployment.guardianSetType,
+  "guardian v2 history entry must equal the canonical guardianSetType",
+);
+assert.equal(
+  guardianVersions[1].codeHash,
+  "0x57bddf3d57ea45c88ab68d0de706bbaecd68895fd6062b099626deb157100119",
+);
+assert.equal(
+  guardianVersions[2].codeHash,
+  "0x7ab8c7d225c0e74ecb01b58f8c7a13e298df08460d0947b776b2e47cd5525782",
+);
+assert.equal(
+  guardianVersions[2].args,
+  "0x4767b1c0444b9206234622869b1205d1acac2b492c34c52e59af14278002a734",
+);
+assert.deepEqual(guardianVersions[2].codeDep, {
+  outPoint: {
+    txHash:
+      "0xfd256c6dbd3b0e2be05cb6f3cbe1f2a0aa2102bb1c1aa63ddeacd670d19b5524",
+    index: 0n,
+  },
+  depType: "code",
+});
+console.log(`${FILE}: guardian history shape PASS`);
+
+assert.equal(
+  leanOracleTestnetPreset.deployment.defaultPublicOracleLock.codeDep.outPoint
+    .txHash,
+  "0xff625007fa8ba4ffbbaa97eb57fe70228228655a1fd72acb69e9abfbd1c4e065",
+  "default public lock must reference the live Type ID-protected code cell",
+);
+console.log(`${FILE}: public lock dep liveness PASS`);
 
 // ── ② There is at least one older version distinct from latest
 const olderKeys = Object.keys(versions)

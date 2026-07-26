@@ -66,6 +66,7 @@ export {
   decodeGuardianSetCellDataBytes,
   decodeGuardianSetCellDataHex,
 } from "./ckb/decodeGuardianSetData.js";
+export { encodeGuardianSetCellDataBytes } from "./ckb/encodeGuardianSetData.js";
 
 // ── Oracle-cell discovery ────────────────────────────────────────────────────
 export { findLatestOracleLiveCellForFeed } from "./ckb/findOracleCells.js";

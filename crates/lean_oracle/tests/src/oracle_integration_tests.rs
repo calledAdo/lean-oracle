@@ -14,7 +14,7 @@ use ckb_testtool::{
     ckb_types::{
         bytes::Bytes,
         core::TransactionBuilder,
-        packed::{CellDep, CellInput, CellOutput, OutPoint, WitnessArgs},
+        packed::{CellDep, CellInput, CellOutput, OutPoint, Script, WitnessArgs},
         prelude::*,
     },
     context::Context,
@@ -22,6 +22,11 @@ use ckb_testtool::{
 use k256::ecdsa::SigningKey;
 use lean_oracle_common::{
     errors::*,
+    governance::{
+        wormhole_quorum, WORMHOLE_GOVERNANCE_ACTION_GUARDIAN_SET_UPGRADE,
+        WORMHOLE_GOVERNANCE_EMITTER_ADDRESS, WORMHOLE_GOVERNANCE_EMITTER_CHAIN,
+        WORMHOLE_GOVERNANCE_MODULE_CORE, WORMHOLE_GOVERNANCE_TARGET_CHAIN_ALL,
+    },
     guardian_set::GuardianSetData,
     merkle::{pyth_leaf_hash, pyth_node_hash},
     oracle_data::OracleData,
@@ -39,6 +44,9 @@ const MAX_CYCLES: u64 = 100_000_000;
 /// single-signer tests. Raise the budget locally rather than the global so
 /// existing single-sig tests still catch unbounded regressions.
 const MULTI_SIG_MAX_CYCLES: u64 = 1_000_000_000;
+/// Real guardian rotations verify 13+ secp256k1 signatures but skip the Pyth
+/// accumulator and Merkle work performed by a price update.
+const GUARDIAN_ROTATION_CYCLE_CEILING: u64 = 160_000_000;
 
 /// Helper to calculate the standard CKB Type ID.
 fn calculate_type_id(first_input: &CellInput, output_index: u64) -> [u8; 32] {
@@ -990,10 +998,12 @@ fn test_guardian_set_rotation_logic() {
         .build_script(&guardian_set_type_op, Bytes::from(type_id.to_vec()))
         .expect("build guardian set type");
 
+    // Genesis set: index 1, single guardian `key_a`, quorum 1.
+    let key_a = SigningKey::from_bytes((&[1u8; 32]).into()).expect("key_a");
     let old_data = GuardianSetData {
         set_index: GuardianSetIndex(1),
         quorum: 1,
-        guardian_addresses: vec![GuardianAddress([0x11; 20])],
+        guardian_addresses: vec![GuardianAddress(ethereum_address(key_a.verifying_key()))],
     };
 
     let input_out_point = context.create_cell(
@@ -1005,68 +1015,526 @@ fn test_guardian_set_rotation_logic() {
         Bytes::from(old_data.to_bytes()),
     );
 
-    // 1. Forward rotation should succeed
+    // 1. Forward rotation endorsed by a valid governance VAA should succeed.
+    let new_addresses = vec![
+        GuardianAddress([0x22; 20]),
+        GuardianAddress([0x33; 20]),
+    ];
     let forward_data = GuardianSetData {
         set_index: GuardianSetIndex(2),
-        ..old_data.clone()
+        quorum: wormhole_quorum(new_addresses.len()),
+        guardian_addresses: new_addresses.clone(),
     };
-    let tx_forward = TransactionBuilder::default()
-        .input(CellInput::new_builder().previous_output(input_out_point.clone()).build())
-        .output(
-            CellOutput::new_builder()
-                .capacity(100_000_000_000u64)
-                .lock(lock.clone())
-                .type_(Some(guardian_set_type_script.clone()).pack())
-                .build(),
-        )
-        .output_data(Bytes::from(forward_data.to_bytes()).pack())
-        .cell_dep(code_dep(&guardian_set_type_op))
-        .build();
-    let tx_forward = context.complete_tx(tx_forward);
-    context.verify_tx(&tx_forward, MAX_CYCLES).expect("forward rotation should succeed");
+    let vaa = canonical_guardian_upgrade_vaa(
+        &[(0, &key_a)],
+        GuardianSetIndex(1),
+        2,
+        &new_addresses,
+    );
+    let tx_forward = build_rotation_tx(
+        &mut context,
+        &guardian_set_type_op,
+        &lock,
+        &guardian_set_type_script,
+        input_out_point.clone(),
+        &forward_data,
+        Some(vaa),
+    );
+    context
+        .verify_tx(&tx_forward, MAX_CYCLES)
+        .expect("forward rotation with valid governance VAA should succeed");
 
-    // 2. Same-index mutation should fail
+    // 2. Same-index mutation should fail before any VAA check (continuity).
     let same_data = GuardianSetData {
-        quorum: 2, // mutated
+        set_index: GuardianSetIndex(1),
+        quorum: 2,
         guardian_addresses: vec![GuardianAddress([0x11; 20]), GuardianAddress([0x22; 20])],
-        ..old_data.clone()
     };
-    let tx_same = TransactionBuilder::default()
-        .input(CellInput::new_builder().previous_output(input_out_point.clone()).build())
-        .output(
-            CellOutput::new_builder()
-                .capacity(100_000_000_000u64)
-                .lock(lock.clone())
-                .type_(Some(guardian_set_type_script.clone()).pack())
-                .build(),
-        )
-        .output_data(Bytes::from(same_data.to_bytes()).pack())
-        .cell_dep(code_dep(&guardian_set_type_op))
-        .build();
-    let tx_same = context.complete_tx(tx_same);
-    let err_same = context.verify_tx(&tx_same, MAX_CYCLES).expect_err("same-index mutation should fail");
-    assert!(err_same.to_string().contains(&format!("error code {}", ERROR_GUARDIAN_SET_CONTINUITY)));
+    let tx_same = build_rotation_tx(
+        &mut context,
+        &guardian_set_type_op,
+        &lock,
+        &guardian_set_type_script,
+        input_out_point.clone(),
+        &same_data,
+        None,
+    );
+    let err_same = context
+        .verify_tx(&tx_same, MAX_CYCLES)
+        .expect_err("same-index mutation should fail");
+    assert!(err_same
+        .to_string()
+        .contains(&format!("error code {}", ERROR_GUARDIAN_SET_CONTINUITY)));
 
-    // 3. Backward rotation should fail
+    // 3. Backward rotation should fail before any VAA check (continuity).
     let backward_data = GuardianSetData {
         set_index: GuardianSetIndex(0),
-        ..old_data
+        ..old_data.clone()
     };
-    let tx_backward = TransactionBuilder::default()
-        .input(CellInput::new_builder().previous_output(input_out_point).build())
+    let tx_backward = build_rotation_tx(
+        &mut context,
+        &guardian_set_type_op,
+        &lock,
+        &guardian_set_type_script,
+        input_out_point,
+        &backward_data,
+        None,
+    );
+    let err_backward = context
+        .verify_tx(&tx_backward, MAX_CYCLES)
+        .expect_err("backward rotation should fail");
+    assert!(err_backward
+        .to_string()
+        .contains(&format!("error code {}", ERROR_GUARDIAN_SET_CONTINUITY)));
+}
+
+/// Full-control builder for a Wormhole guardian-set-upgrade governance VAA.
+///
+/// Signs `keccak256(keccak256(body))` with each provided guardian key, exactly
+/// as Wormhole does, so the produced VAA verifies against the signing set.
+#[allow(clippy::too_many_arguments)]
+fn build_guardian_upgrade_vaa_full(
+    signers: &[(u8, &SigningKey)],
+    signing_set_index: GuardianSetIndex,
+    new_index: u32,
+    new_addresses: &[GuardianAddress],
+    emitter_chain: u16,
+    emitter_address: [u8; 32],
+    module: [u8; 32],
+    action: u8,
+    target_chain: u16,
+) -> Vec<u8> {
+    // Governance packet (VAA payload).
+    let mut payload = Vec::new();
+    payload.extend_from_slice(&module);
+    payload.push(action);
+    payload.extend_from_slice(&target_chain.to_be_bytes());
+    payload.extend_from_slice(&new_index.to_be_bytes());
+    payload.push(new_addresses.len() as u8);
+    for addr in new_addresses {
+        payload.extend_from_slice(addr.as_slice());
+    }
+
+    // Standard Wormhole body.
+    let mut body = Vec::new();
+    body.extend_from_slice(&1000u32.to_be_bytes()); // timestamp
+    body.extend_from_slice(&0u32.to_be_bytes()); // nonce
+    body.extend_from_slice(&emitter_chain.to_be_bytes());
+    body.extend_from_slice(&emitter_address);
+    body.extend_from_slice(&1u64.to_be_bytes()); // sequence
+    body.push(1); // consistency_level
+    body.extend_from_slice(&payload);
+
+    // Wormhole digests the body twice with keccak256.
+    let body_digest_inner = Keccak256::digest(&body);
+
+    let mut sig_section = Vec::new();
+    sig_section.push(signers.len() as u8);
+    for (guardian_index, key) in signers {
+        let hash = Keccak256::new().chain_update(body_digest_inner);
+        let (sig, recid) = key.sign_digest_recoverable(hash).expect("sign");
+        sig_section.push(*guardian_index);
+        sig_section.extend_from_slice(&sig.to_bytes());
+        sig_section.push(recid.to_byte());
+    }
+
+    let mut encoded = Vec::new();
+    encoded.push(1); // version
+    encoded.extend_from_slice(&signing_set_index.0.to_be_bytes());
+    encoded.extend_from_slice(&sig_section);
+    encoded.extend_from_slice(&body);
+    encoded
+}
+
+/// Canonical (correct emitter/module/action/target-chain) guardian-set-upgrade
+/// VAA. Used by the happy path; negative tests use the full builder to perturb
+/// individual fields.
+fn canonical_guardian_upgrade_vaa(
+    signers: &[(u8, &SigningKey)],
+    signing_set_index: GuardianSetIndex,
+    new_index: u32,
+    new_addresses: &[GuardianAddress],
+) -> Vec<u8> {
+    build_guardian_upgrade_vaa_full(
+        signers,
+        signing_set_index,
+        new_index,
+        new_addresses,
+        WORMHOLE_GOVERNANCE_EMITTER_CHAIN,
+        WORMHOLE_GOVERNANCE_EMITTER_ADDRESS,
+        WORMHOLE_GOVERNANCE_MODULE_CORE,
+        WORMHOLE_GOVERNANCE_ACTION_GUARDIAN_SET_UPGRADE,
+        WORMHOLE_GOVERNANCE_TARGET_CHAIN_ALL,
+    )
+}
+
+/// Build a guardian-set rotation transaction spending `input_out_point` and
+/// producing a cell with `new_data`, optionally attaching `vaa` in the group
+/// input's WitnessArgs `input_type`.
+fn build_rotation_tx(
+    context: &mut Context,
+    guardian_set_type_op: &OutPoint,
+    lock: &Script,
+    guardian_set_type_script: &Script,
+    input_out_point: OutPoint,
+    new_data: &GuardianSetData,
+    vaa: Option<Vec<u8>>,
+) -> ckb_testtool::ckb_types::core::TransactionView {
+    let witness_args = match vaa {
+        Some(bytes) => WitnessArgs::new_builder()
+            .input_type(Some(Bytes::from(bytes)).pack())
+            .build(),
+        None => WitnessArgs::new_builder().build(),
+    };
+
+    let tx = TransactionBuilder::default()
+        .input(
+            CellInput::new_builder()
+                .previous_output(input_out_point)
+                .build(),
+        )
         .output(
             CellOutput::new_builder()
                 .capacity(100_000_000_000u64)
-                .lock(lock)
-                .type_(Some(guardian_set_type_script).pack())
+                .lock(lock.clone())
+                .type_(Some(guardian_set_type_script.clone()).pack())
                 .build(),
         )
-        .output_data(Bytes::from(backward_data.to_bytes()).pack())
-        .cell_dep(code_dep(&guardian_set_type_op))
+        .output_data(Bytes::from(new_data.to_bytes()).pack())
+        .cell_dep(code_dep(guardian_set_type_op))
+        .witness(witness_args.as_bytes().pack())
         .build();
-    let tx_backward = context.complete_tx(tx_backward);
-    let err_backward = context.verify_tx(&tx_backward, MAX_CYCLES).expect_err("backward rotation should fail");
-    assert!(err_backward.to_string().contains(&format!("error code {}", ERROR_GUARDIAN_SET_CONTINUITY)));
+    context.complete_tx(tx)
+}
+
+/// Shared fixture: genesis set (index 1, single guardian `key_a`, quorum 1) plus
+/// its live cell. Returns everything a rotation-negative test needs.
+fn rotation_test_fixture() -> (
+    Context,
+    OutPoint,
+    Script,
+    Script,
+    OutPoint,
+    SigningKey,
+    GuardianSetData,
+) {
+    let mut context = Context::default();
+    let guardian_set_type_op = load_guardian_set_type(&mut context);
+    let always_success_op = deploy_always_success(&mut context);
+
+    let lock = context
+        .build_script(&always_success_op, Bytes::from_static(b"lock"))
+        .expect("build lock");
+    let guardian_set_type_script = context
+        .build_script(&guardian_set_type_op, Bytes::from([0xAA; 32].to_vec()))
+        .expect("build guardian set type");
+
+    let key_a = SigningKey::from_bytes((&[1u8; 32]).into()).expect("key_a");
+    let old_data = GuardianSetData {
+        set_index: GuardianSetIndex(1),
+        quorum: 1,
+        guardian_addresses: vec![GuardianAddress(ethereum_address(key_a.verifying_key()))],
+    };
+    let input_out_point = context.create_cell(
+        CellOutput::new_builder()
+            .capacity(100_000_000_000u64)
+            .lock(lock.clone())
+            .type_(Some(guardian_set_type_script.clone()).pack())
+            .build(),
+        Bytes::from(old_data.to_bytes()),
+    );
+
+    (
+        context,
+        guardian_set_type_op,
+        lock,
+        guardian_set_type_script,
+        input_out_point,
+        key_a,
+        old_data,
+    )
+}
+
+#[test]
+fn test_rotation_rejected_without_governance_vaa() {
+    let (mut context, gt_op, lock, gt_script, in_op, _key_a, _old) = rotation_test_fixture();
+    let new_addresses = vec![GuardianAddress([0x22; 20]), GuardianAddress([0x33; 20])];
+    let new_data = GuardianSetData {
+        set_index: GuardianSetIndex(2),
+        quorum: wormhole_quorum(new_addresses.len()),
+        guardian_addresses: new_addresses,
+    };
+    let tx = build_rotation_tx(&mut context, &gt_op, &lock, &gt_script, in_op, &new_data, None);
+    let err = context
+        .verify_tx(&tx, MAX_CYCLES)
+        .expect_err("rotation without a governance VAA must fail");
+    assert!(err
+        .to_string()
+        .contains(&format!("error code {}", ERROR_GOVERNANCE_VAA_MALFORMED)));
+}
+
+#[test]
+fn test_rotation_rejected_wrong_signing_set() {
+    // VAA signed with guardian_set_index 5 (not the current on-chain set 1).
+    let (mut context, gt_op, lock, gt_script, in_op, key_a, _old) = rotation_test_fixture();
+    let new_addresses = vec![GuardianAddress([0x22; 20]), GuardianAddress([0x33; 20])];
+    let new_data = GuardianSetData {
+        set_index: GuardianSetIndex(2),
+        quorum: wormhole_quorum(new_addresses.len()),
+        guardian_addresses: new_addresses.clone(),
+    };
+    let vaa = canonical_guardian_upgrade_vaa(&[(0, &key_a)], GuardianSetIndex(5), 2, &new_addresses);
+    let tx = build_rotation_tx(&mut context, &gt_op, &lock, &gt_script, in_op, &new_data, Some(vaa));
+    let err = context
+        .verify_tx(&tx, MAX_CYCLES)
+        .expect_err("VAA not signed by the current set must fail");
+    assert!(err
+        .to_string()
+        .contains(&format!("error code {}", ERROR_ROTATION_INDEX_MISMATCH)));
+}
+
+#[test]
+fn test_rotation_rejected_index_skip() {
+    // Output cell jumps to index 3 while the VAA only endorses index 2.
+    let (mut context, gt_op, lock, gt_script, in_op, key_a, _old) = rotation_test_fixture();
+    let new_addresses = vec![GuardianAddress([0x22; 20]), GuardianAddress([0x33; 20])];
+    let new_data = GuardianSetData {
+        set_index: GuardianSetIndex(3),
+        quorum: wormhole_quorum(new_addresses.len()),
+        guardian_addresses: new_addresses.clone(),
+    };
+    let vaa = canonical_guardian_upgrade_vaa(&[(0, &key_a)], GuardianSetIndex(1), 3, &new_addresses);
+    let tx = build_rotation_tx(&mut context, &gt_op, &lock, &gt_script, in_op, &new_data, Some(vaa));
+    let err = context
+        .verify_tx(&tx, MAX_CYCLES)
+        .expect_err("index skip (not old+1) must fail");
+    assert!(err
+        .to_string()
+        .contains(&format!("error code {}", ERROR_ROTATION_INDEX_MISMATCH)));
+}
+
+#[test]
+fn test_rotation_rejected_address_mismatch() {
+    // Cell writes different addresses than the VAA declares.
+    let (mut context, gt_op, lock, gt_script, in_op, key_a, _old) = rotation_test_fixture();
+    let declared = vec![GuardianAddress([0x22; 20]), GuardianAddress([0x33; 20])];
+    let forged = vec![GuardianAddress([0x22; 20]), GuardianAddress([0x44; 20])];
+    let new_data = GuardianSetData {
+        set_index: GuardianSetIndex(2),
+        quorum: wormhole_quorum(forged.len()),
+        guardian_addresses: forged,
+    };
+    let vaa = canonical_guardian_upgrade_vaa(&[(0, &key_a)], GuardianSetIndex(1), 2, &declared);
+    let tx = build_rotation_tx(&mut context, &gt_op, &lock, &gt_script, in_op, &new_data, Some(vaa));
+    let err = context
+        .verify_tx(&tx, MAX_CYCLES)
+        .expect_err("address mismatch vs VAA must fail");
+    assert!(err
+        .to_string()
+        .contains(&format!("error code {}", ERROR_ROTATION_SET_MISMATCH)));
+}
+
+#[test]
+fn test_rotation_rejected_forged_quorum() {
+    // Correct addresses, but a weakened quorum (1 instead of derived 2).
+    let (mut context, gt_op, lock, gt_script, in_op, key_a, _old) = rotation_test_fixture();
+    let new_addresses = vec![GuardianAddress([0x22; 20]), GuardianAddress([0x33; 20])];
+    let new_data = GuardianSetData {
+        set_index: GuardianSetIndex(2),
+        quorum: 1, // forged: wormhole_quorum(2) == 2
+        guardian_addresses: new_addresses.clone(),
+    };
+    let vaa = canonical_guardian_upgrade_vaa(&[(0, &key_a)], GuardianSetIndex(1), 2, &new_addresses);
+    let tx = build_rotation_tx(&mut context, &gt_op, &lock, &gt_script, in_op, &new_data, Some(vaa));
+    let err = context
+        .verify_tx(&tx, MAX_CYCLES)
+        .expect_err("forged quorum must fail");
+    assert!(err
+        .to_string()
+        .contains(&format!("error code {}", ERROR_ROTATION_QUORUM_MISMATCH)));
+}
+
+#[test]
+fn test_rotation_rejected_non_governance_emitter() {
+    // Correctly signed by the current set, but from a non-governance emitter.
+    let (mut context, gt_op, lock, gt_script, in_op, key_a, _old) = rotation_test_fixture();
+    let new_addresses = vec![GuardianAddress([0x22; 20]), GuardianAddress([0x33; 20])];
+    let new_data = GuardianSetData {
+        set_index: GuardianSetIndex(2),
+        quorum: wormhole_quorum(new_addresses.len()),
+        guardian_addresses: new_addresses.clone(),
+    };
+    let vaa = build_guardian_upgrade_vaa_full(
+        &[(0, &key_a)],
+        GuardianSetIndex(1),
+        2,
+        &new_addresses,
+        26,          // wrong emitter chain
+        [0x99; 32],  // wrong emitter address
+        WORMHOLE_GOVERNANCE_MODULE_CORE,
+        WORMHOLE_GOVERNANCE_ACTION_GUARDIAN_SET_UPGRADE,
+        WORMHOLE_GOVERNANCE_TARGET_CHAIN_ALL,
+    );
+    let tx = build_rotation_tx(&mut context, &gt_op, &lock, &gt_script, in_op, &new_data, Some(vaa));
+    let err = context
+        .verify_tx(&tx, MAX_CYCLES)
+        .expect_err("non-governance emitter must fail");
+    assert!(err
+        .to_string()
+        .contains(&format!("error code {}", ERROR_GOVERNANCE_EMITTER_MISMATCH)));
+}
+
+#[test]
+fn test_rotation_rejected_wrong_action() {
+    // Governance emitter, but action != GuardianSetUpgrade.
+    let (mut context, gt_op, lock, gt_script, in_op, key_a, _old) = rotation_test_fixture();
+    let new_addresses = vec![GuardianAddress([0x22; 20]), GuardianAddress([0x33; 20])];
+    let new_data = GuardianSetData {
+        set_index: GuardianSetIndex(2),
+        quorum: wormhole_quorum(new_addresses.len()),
+        guardian_addresses: new_addresses.clone(),
+    };
+    let vaa = build_guardian_upgrade_vaa_full(
+        &[(0, &key_a)],
+        GuardianSetIndex(1),
+        2,
+        &new_addresses,
+        WORMHOLE_GOVERNANCE_EMITTER_CHAIN,
+        WORMHOLE_GOVERNANCE_EMITTER_ADDRESS,
+        WORMHOLE_GOVERNANCE_MODULE_CORE,
+        99, // wrong action
+        WORMHOLE_GOVERNANCE_TARGET_CHAIN_ALL,
+    );
+    let tx = build_rotation_tx(&mut context, &gt_op, &lock, &gt_script, in_op, &new_data, Some(vaa));
+    let err = context
+        .verify_tx(&tx, MAX_CYCLES)
+        .expect_err("wrong governance action must fail");
+    assert!(err
+        .to_string()
+        .contains(&format!("error code {}", ERROR_GOVERNANCE_ACTION_INVALID)));
+}
+
+#[test]
+fn test_rotation_rejected_forged_signer() {
+    // VAA signed by a key that is NOT the current guardian, but claims index 0.
+    let (mut context, gt_op, lock, gt_script, in_op, _key_a, _old) = rotation_test_fixture();
+    let impostor = SigningKey::from_bytes((&[9u8; 32]).into()).expect("impostor");
+    let new_addresses = vec![GuardianAddress([0x22; 20]), GuardianAddress([0x33; 20])];
+    let new_data = GuardianSetData {
+        set_index: GuardianSetIndex(2),
+        quorum: wormhole_quorum(new_addresses.len()),
+        guardian_addresses: new_addresses.clone(),
+    };
+    let vaa = canonical_guardian_upgrade_vaa(&[(0, &impostor)], GuardianSetIndex(1), 2, &new_addresses);
+    let tx = build_rotation_tx(&mut context, &gt_op, &lock, &gt_script, in_op, &new_data, Some(vaa));
+    let err = context
+        .verify_tx(&tx, MAX_CYCLES)
+        .expect_err("forged signer must fail");
+    assert!(err
+        .to_string()
+        .contains(&format!("error code {}", ERROR_GUARDIAN_SIGNATURE_INVALID)));
+}
+
+#[test]
+fn test_official_guardian_set_6_to_7_upgrade_vaa() {
+    let set_6 = [
+        "5893B5A76c3f739645648885bDCcC06cd70a3Cd3",
+        "fF6CB952589BDE862c25Ef4392132fb9D4A42157",
+        "114De8460193bdf3A2fCf81f86a09765F4762fD1",
+        "107A0086b32d7A0977926A205131d8731D39cbEB",
+        "8C82B2fd82FaeD2711d59AF0F2499D16e726f6b2",
+        "42579bFFbCF4276E290aB8E4C162bd4052b97970",
+        "938f104AEb5581293216ce97d771e0CB721221B1",
+        "18e41674CcF26329cD111406C1D05C6c80b23EdC",
+        "9D16870160e703324D057c3361c34C5beFBa2c34",
+        "000aC0076727b35FBea2dAc28fEE5cCB0fEA768e",
+        "AF45Ced136b9D9e24903464AE889F5C8a723FC14",
+        "f93124b7c738843CBB89E864c862c38cddCccF95",
+        "D2CC37A4dc036a8D232b48f62cDD4731412f4890",
+        "DA798F6896A3331F64b48c12D1D57Fd9cbe70811",
+        "D1F64e26238811de5553C40f64af41eE1B6057Cc",
+        "3F851Ad586A47ceF8d04748f33ab0D71395f06b4",
+        "178e21ad2E77AE06711549CFBB1f9c7a9d8096e8",
+        "7899cEAB1DC961Dae9defDB7A4f521269a5448FC",
+        "6FbEBc898F403E4773E95feB15E80C9A99c8348d",
+    ];
+    let set_7 = [
+        "5893B5A76c3f739645648885bDCcC06cd70a3Cd3",
+        "fF6CB952589BDE862c25Ef4392132fb9D4A42157",
+        "114De8460193bdf3A2fCf81f86a09765F4762fD1",
+        "107A0086b32d7A0977926A205131d8731D39cbEB",
+        "8C82B2fd82FaeD2711d59AF0F2499D16e726f6b2",
+        "42579bFFbCF4276E290aB8E4C162bd4052b97970",
+        "938f104AEb5581293216ce97d771e0CB721221B1",
+        "F3ea0AD4FFB5a178AE4EBc21861651B25BdcbB91",
+        "9D16870160e703324D057c3361c34C5beFBa2c34",
+        "000aC0076727b35FBea2dAc28fEE5cCB0fEA768e",
+        "AF45Ced136b9D9e24903464AE889F5C8a723FC14",
+        "f93124b7c738843CBB89E864c862c38cddCccF95",
+        "D2CC37A4dc036a8D232b48f62cDD4731412f4890",
+        "DA798F6896A3331F64b48c12D1D57Fd9cbe70811",
+        "aE565927Bb8dB25CD8Bf3e7BB663D70023e4Ea78",
+        "3F851Ad586A47ceF8d04748f33ab0D71395f06b4",
+        "178e21ad2E77AE06711549CFBB1f9c7a9d8096e8",
+        "7899cEAB1DC961Dae9defDB7A4f521269a5448FC",
+        "61D9800f9FCb4160FB0C6cf3A0902592bAC2B434",
+    ];
+    let to_addresses = |source: &[&str]| {
+        source
+            .iter()
+            .map(|address| GuardianAddress(decode_hex_20(address).expect("decode guardian")))
+            .collect::<Vec<_>>()
+    };
+
+    let mut context = Context::default();
+    let guardian_set_type_op = load_guardian_set_type(&mut context);
+    let always_success_op = deploy_always_success(&mut context);
+    let lock = context
+        .build_script(&always_success_op, Bytes::from_static(b"lock"))
+        .expect("build lock");
+    let guardian_set_type_script = context
+        .build_script(&guardian_set_type_op, Bytes::from(vec![0xAA; 32]))
+        .expect("build guardian set type");
+
+    let old_data = GuardianSetData {
+        set_index: GuardianSetIndex(6),
+        quorum: 13,
+        guardian_addresses: to_addresses(&set_6),
+    };
+    let input_out_point = context.create_cell(
+        CellOutput::new_builder()
+            .capacity(100_000_000_000u64)
+            .lock(lock.clone())
+            .type_(Some(guardian_set_type_script.clone()).pack())
+            .build(),
+        Bytes::from(old_data.to_bytes()),
+    );
+    let new_data = GuardianSetData {
+        set_index: GuardianSetIndex(7),
+        quorum: 13,
+        guardian_addresses: to_addresses(&set_7),
+    };
+    let vaa = decode_hex(
+        include_str!("../../../../fixtures/wormhole/mainnet-guardian-set-upgrade-v7.hex").trim(),
+    )
+    .expect("decode official gs7 VAA");
+    let tx = build_rotation_tx(
+        &mut context,
+        &guardian_set_type_op,
+        &lock,
+        &guardian_set_type_script,
+        input_out_point,
+        &new_data,
+        Some(vaa),
+    );
+
+    let cycles = context
+        .verify_tx(&tx, MULTI_SIG_MAX_CYCLES)
+        .expect("official gs7 VAA must rotate set 6 to set 7");
+    assert!(
+        cycles <= GUARDIAN_ROTATION_CYCLE_CEILING,
+        "official gs7 rotation consumed {cycles} cycles, exceeding {GUARDIAN_ROTATION_CYCLE_CEILING}"
+    );
 }
 
 #[test]

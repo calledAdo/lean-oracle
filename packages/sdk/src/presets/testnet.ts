@@ -34,22 +34,22 @@ export const leanOracleTestnetPreset: LeanOracleNetworkConfig = {
       codeDep: {
         outPoint: {
           txHash:
-            "0x982a5d5555ebc855a97d9e71a8ac9de9cefc25a62a44ccfc2b6605758c01ba9f",
+            "0xff625007fa8ba4ffbbaa97eb57fe70228228655a1fd72acb69e9abfbd1c4e065",
           index: 0n,
         },
         depType: "code",
       },
     },
-    // Current (latest) oracle type-script version — used by default for
-    // discovery, update, deploy, and burn. Equals `oracleTypeVersions[3]`.
+    // Current (latest) oracle type-script version - used by default for
+    // discovery, update, deploy, and burn. Equals `oracleTypeVersions[4]`.
     oracleType: {
       codeHash:
-        "0xb2a48cc368e55269e4bd10a6548a1ff3a18aff7a290927268b42f42ecb197d63",
+        "0x5711c27408e948befdf55cdebf29b6ed0b6c56d8866200dab1dd53f28bef8c55",
       hashType: "data2",
       codeDep: {
         outPoint: {
           txHash:
-            "0xf794a02d605a1d76cb6610c9c6bb344165f96d1b4bf27e695d7f5ce0c3542d3b",
+            "0x797167087bce4fa6b5bb1b6620f4e52bdad86bff28de159a732db0f82440131d",
           index: 0n,
         },
         depType: "code",
@@ -90,7 +90,7 @@ export const leanOracleTestnetPreset: LeanOracleNetworkConfig = {
           depType: "code",
         },
       },
-      // v3 — current; zero-initializes price state at creation, so a nonzero
+      // v3 - zero-initializes price state at creation, so a nonzero
       // publish_time provably means the cell was authenticated by an update.
       3: {
         codeHash:
@@ -105,6 +105,21 @@ export const leanOracleTestnetPreset: LeanOracleNetworkConfig = {
           depType: "code",
         },
       },
+      // v4 - current reproducible build after guardian governance was added to
+      // the shared contract crate; oracle behavior is unchanged from v3.
+      4: {
+        codeHash:
+          "0x5711c27408e948befdf55cdebf29b6ed0b6c56d8866200dab1dd53f28bef8c55",
+        hashType: "data2",
+        codeDep: {
+          outPoint: {
+            txHash:
+              "0x797167087bce4fa6b5bb1b6620f4e52bdad86bff28de159a732db0f82440131d",
+            index: 0n,
+          },
+          depType: "code",
+        },
+      },
     },
     pythEmitter: {
       chain: 26,
@@ -113,16 +128,50 @@ export const leanOracleTestnetPreset: LeanOracleNetworkConfig = {
     },
     guardianSetType: {
       codeHash:
-        "0x57bddf3d57ea45c88ab68d0de706bbaecd68895fd6062b099626deb157100119",
+        "0x7ab8c7d225c0e74ecb01b58f8c7a13e298df08460d0947b776b2e47cd5525782",
       hashType: "data2",
-      args: "0x3e62200a42204a48f974b7d6cc9dce4f8b9a009baf2d848ec316c156feedf1a5",
+      args: "0x4767b1c0444b9206234622869b1205d1acac2b492c34c52e59af14278002a734",
       codeDep: {
         outPoint: {
           txHash:
-            "0x78f83c3967c566c50c783d45c9165af94d23018c5254228b3eb418aa0c5ac37f",
+            "0xfd256c6dbd3b0e2be05cb6f3cbe1f2a0aa2102bb1c1aa63ddeacd670d19b5524",
           index: 0n,
         },
         depType: "code",
+      },
+    },
+    guardianSetTypeVersions: {
+      // v1 - trusted-lock rotation only; retained for legacy cell inspection.
+      1: {
+        codeHash:
+          "0x57bddf3d57ea45c88ab68d0de706bbaecd68895fd6062b099626deb157100119",
+        hashType: "data2",
+        args:
+          "0x3e62200a42204a48f974b7d6cc9dce4f8b9a009baf2d848ec316c156feedf1a5",
+        codeDep: {
+          outPoint: {
+            txHash:
+              "0x78f83c3967c566c50c783d45c9165af94d23018c5254228b3eb418aa0c5ac37f",
+            index: 0n,
+          },
+          depType: "code",
+        },
+      },
+      // v2 - current; verifies Wormhole GuardianSetUpgrade VAAs on-chain.
+      2: {
+        codeHash:
+          "0x7ab8c7d225c0e74ecb01b58f8c7a13e298df08460d0947b776b2e47cd5525782",
+        hashType: "data2",
+        args:
+          "0x4767b1c0444b9206234622869b1205d1acac2b492c34c52e59af14278002a734",
+        codeDep: {
+          outPoint: {
+            txHash:
+              "0xfd256c6dbd3b0e2be05cb6f3cbe1f2a0aa2102bb1c1aa63ddeacd670d19b5524",
+            index: 0n,
+          },
+          depType: "code",
+        },
       },
     },
   },

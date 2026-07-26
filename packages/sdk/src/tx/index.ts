@@ -14,6 +14,16 @@ export type {
 export { attachOracleBurn } from "./burnOracle.js";
 export type { OracleBurnParams, OracleBurnResult } from "./burnOracle.js";
 export {
+  attachGuardianSetRotation,
+  buildGuardianSetRotationIfBehind,
+} from "./rotateGuardianSet.js";
+export type {
+  GuardianSetRotationParams,
+  GuardianSetRotationResult,
+  GuardianSetRotationPlan,
+  BuildGuardianSetRotationIfBehindParams,
+} from "./rotateGuardianSet.js";
+export {
   initiateOracleUpdateTx,
   initiateReadOracleTx,
   initiateOracleDeployTx,

@@ -27,6 +27,8 @@ pub mod parse_error;
 pub(crate) mod byte_reader;
 // Guardian-set cell parsing and encoding.
 pub mod guardian_set;
+// Trustless guardian-set rotation via Wormhole governance VAAs.
+pub mod governance;
 // Generic and Pyth-specific Merkle helpers.
 pub mod merkle;
 // Oracle cell parsing and encoding.

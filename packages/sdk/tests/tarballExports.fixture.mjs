@@ -87,11 +87,15 @@ import { findLatestOracleLiveCellForFeed } from "lean-oracle-sdk/ckb";
 assert.equal(typeof findLatestOracleLiveCellForFeed, "function");
 
 import {
+  attachGuardianSetRotation,
+  buildGuardianSetRotationIfBehind,
   initiateOracleDeployTx,
   initiateOracleBurnTx,
   initiateOracleUpdateTx,
   initiateReadOracleTx,
 } from "lean-oracle-sdk/tx";
+assert.equal(typeof attachGuardianSetRotation, "function");
+assert.equal(typeof buildGuardianSetRotationIfBehind, "function");
 assert.equal(typeof initiateOracleDeployTx, "function");
 assert.equal(typeof initiateOracleBurnTx, "function");
 assert.equal(typeof initiateOracleUpdateTx, "function");
@@ -106,6 +110,15 @@ import {
 } from "lean-oracle-sdk/hermes";
 assert.equal(typeof fetchHermesLatestPriceUpdates, "function");
 assert.equal(typeof normalizePythFeedId, "function");
+
+import {
+  fetchGuardianSetUpgradeVaa,
+  parseGuardianSetUpgradeVaa,
+  wormholeQuorum,
+} from "lean-oracle-sdk/wormhole";
+assert.equal(typeof fetchGuardianSetUpgradeVaa, "function");
+assert.equal(typeof parseGuardianSetUpgradeVaa, "function");
+assert.equal(wormholeQuorum(19), 13);
 
 import {
   leanOracleTestnetPreset as presetFromPresets,

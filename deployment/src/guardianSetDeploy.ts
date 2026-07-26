@@ -54,7 +54,11 @@ function selectLatestCanonicalVersion(versions: Record<number, CodeDeploymentVer
   return record;
 }
 
-function loadGuardianSetTypeVersion(params: {
+export function encodeGuardianSetDataBytes(cfg: GuardianSetConfig): Uint8Array {
+  return encodeGuardianSetData(cfg);
+}
+
+export function loadGuardianSetTypeVersion(params: {
   deploymentRoot: string;
   network: DeploymentNetwork;
 }): CodeDeploymentVersionRecord {

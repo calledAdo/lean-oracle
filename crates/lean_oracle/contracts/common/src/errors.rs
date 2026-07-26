@@ -80,3 +80,25 @@ pub const ERROR_BIND_LOCK_TYPE_NOT_FOUND: i8 = 43;
 // produce an *uninitialized* cell (all price/time fields zero) so that a nonzero
 // `publish_time` provably means the cell has been authenticated by an update.
 pub const ERROR_CREATION_STATE_NONZERO: i8 = 44;
+
+// Trustless guardian-set rotation errors (guardian_set_script update path).
+//
+// The governance VAA supplied to authorize a rotation could not be parsed, or
+// its upgrade payload was not a well-formed guardian-set upgrade.
+pub const ERROR_GOVERNANCE_VAA_MALFORMED: i8 = 45;
+// The governance VAA did not originate from the canonical Wormhole governance
+// emitter (chain + address).
+pub const ERROR_GOVERNANCE_EMITTER_MISMATCH: i8 = 46;
+// The governance message was not a guardian-set upgrade addressed to all chains
+// (wrong module, action, or target chain).
+pub const ERROR_GOVERNANCE_ACTION_INVALID: i8 = 47;
+// The rotation did not advance the set index by exactly one step, the output
+// cell's index did not match the VAA's declared new index, or the VAA was not
+// signed by the current on-chain set.
+pub const ERROR_ROTATION_INDEX_MISMATCH: i8 = 48;
+// The output cell's guardian addresses did not exactly match the addresses
+// declared in the governance upgrade VAA.
+pub const ERROR_ROTATION_SET_MISMATCH: i8 = 49;
+// The output cell's quorum did not equal the canonical Wormhole quorum derived
+// from the new set size.
+pub const ERROR_ROTATION_QUORUM_MISMATCH: i8 = 50;
